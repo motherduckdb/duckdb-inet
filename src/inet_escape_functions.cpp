@@ -1,5 +1,5 @@
 #include "duckdb/planner/expression/bound_function_expression.hpp"
-#include "duckdb/main/extension_util.hpp"
+#include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/common/types/blob.hpp"
 #include "utf8proc_wrapper.hpp"
 #include "inet_extension.hpp"
