@@ -15,13 +15,12 @@ namespace duckdb {
 
 class InetExtension : public Extension {
 public:
-  void Load(DuckDB &db) override;
+  void Load(ExtensionLoader &loader) override;
   std::string Name() override;
   std::string Version() const override;
 
-protected:
-  ScalarFunctionSet GetEscapeFunctionSet();
-  ScalarFunction GetUnescapeFunction();
+  static ScalarFunctionSet GetEscapeFunctionSet();
+  static ScalarFunction GetUnescapeFunction();
 };
 
 } // namespace duckdb
