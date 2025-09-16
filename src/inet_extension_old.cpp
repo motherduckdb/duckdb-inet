@@ -50,6 +50,7 @@ static void LoadInternal(ExtensionLoader &loader) {
   loader.RegisterFunction(
       ScalarFunction("broadcast", {inet_type}, {inet_type},
                                    INetFunctions::Broadcast));
+
   loader.RegisterFunction(InetExtension::GetEscapeFunctionSet());
   loader.RegisterFunction(InetExtension::GetUnescapeFunction());
 
