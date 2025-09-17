@@ -1,5 +1,6 @@
 import json
 import subprocess
+
 LOOKUP_TABLE_STR = """
 {
   "&AElig": { "codepoints": [198] },
@@ -2254,7 +2255,7 @@ struct INET_HTMLEntity;
 LOOKUP_TABLE_JSON = json.loads(LOOKUP_TABLE_STR)
 for key, value in LOOKUP_TABLE_JSON.items():
     codepoints = []
-    for cp in  value["codepoints"]:
+    for cp in value["codepoints"]:
         codepoints.append(str(cp))
     if len(codepoints) == 1:
         codepoints.append("0")
@@ -2269,11 +2270,7 @@ GPERF_INPUT += "%%\n"
 # And pipe the output to a file
 with open("inet_html_table.c", "w") as f:
     process = subprocess.Popen(
-        ["gperf", "-L", "ANSI-C"],
-        stdin=subprocess.PIPE,
-        stdout=f,
-        stderr=subprocess.PIPE,
-        text=True
+        ["gperf", "-L", "ANSI-C"], stdin=subprocess.PIPE, stdout=f, stderr=subprocess.PIPE, text=True
     )
     stdout, stderr = process.communicate(input=GPERF_INPUT)
     if process.returncode != 0:

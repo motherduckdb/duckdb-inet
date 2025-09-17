@@ -33,9 +33,9 @@ project(${EXTENSION_NAME} LANGUAGES C)
 # Create Extension library
 set(EXTENSION_SOURCES
         src/inet_extension.c
-        src/ip_address.c
-        src/html_unescape.c
-        src/html_entity_lookup.c
+        src/inet_html.c
+        src/inet_html_table.c
+        src/inet_ipaddress.c
 )
 
 if (DUCKDB_WASM_EXTENSION)
@@ -52,7 +52,7 @@ set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -s")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -s")
 
 # Include own headers
-target_include_directories(${EXTENSION_NAME} PRIVATE src/include)
+target_include_directories(${EXTENSION_NAME} PRIVATE src)
 
 # Include DuckDB C API headers
 target_include_directories(${EXTENSION_NAME} PRIVATE duckdb_capi)
