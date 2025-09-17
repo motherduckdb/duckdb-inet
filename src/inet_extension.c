@@ -864,7 +864,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	duckdb_scalar_function_add_parameter(add_function, hugeint_type);
 	duckdb_scalar_function_set_return_type(add_function, inet_type);
 	duckdb_scalar_function_set_function(add_function, add_function_impl);
-	success = duckdb_register_scalar_function_or(connection, add_function, DUCKDB_ON_CONFLICT_ALTER) == DuckDBSuccess;
+	success = duckdb_register_scalar_function(connection, add_function) == DuckDBSuccess;
 	if (!success) {
 		access->set_error(info, "Failed to register + function");
 		goto cleanup;
@@ -876,7 +876,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	duckdb_scalar_function_add_parameter(sub_function, hugeint_type);
 	duckdb_scalar_function_set_return_type(sub_function, inet_type);
 	duckdb_scalar_function_set_function(sub_function, sub_function_impl);
-	success = duckdb_register_scalar_function_or(connection, sub_function, DUCKDB_ON_CONFLICT_ALTER) == DuckDBSuccess;
+	success = duckdb_register_scalar_function(connection, sub_function) == DuckDBSuccess;
 	if (!success) {
 		access->set_error(info, "Failed to register - function");
 		goto cleanup;
@@ -888,8 +888,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	duckdb_scalar_function_add_parameter(contains_left_function, inet_type);
 	duckdb_scalar_function_set_return_type(contains_left_function, bool_type);
 	duckdb_scalar_function_set_function(contains_left_function, contains_left_function_impl);
-	success = duckdb_register_scalar_function_or(connection, contains_left_function, DUCKDB_ON_CONFLICT_ALTER) ==
-	          DuckDBSuccess;
+	success = duckdb_register_scalar_function(connection, contains_left_function) == DuckDBSuccess;
 	if (!success) {
 		access->set_error(info, "Failed to register <<= function");
 		goto cleanup;
@@ -901,8 +900,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	duckdb_scalar_function_add_parameter(contains_right_function, inet_type);
 	duckdb_scalar_function_set_return_type(contains_right_function, bool_type);
 	duckdb_scalar_function_set_function(contains_right_function, contains_right_function_impl);
-	success = duckdb_register_scalar_function_or(connection, contains_right_function, DUCKDB_ON_CONFLICT_ALTER) ==
-	          DuckDBSuccess;
+	success = duckdb_register_scalar_function(connection, contains_right_function) == DuckDBSuccess;
 	if (!success) {
 		access->set_error(info, "Failed to register >>= function");
 		goto cleanup;
