@@ -1,10 +1,10 @@
+#include "duckdb_extension.h"
+#include "inet_html.h"
+#include "inet_ipaddress.h"
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "duckdb_extension.h"
-#include "html_unescape.h"
-#include "ip_address.h"
 
 // Forward declare vtable
 DUCKDB_EXTENSION_EXTERN
@@ -85,7 +85,7 @@ static duckdb_logical_type make_inet_type() {
 // CAST FUNCTIONS
 //----------------------------------------------------------------------------------------------------------------------
 
-static duckdb_uhugeint FromCompatAddr(duckdb_hugeint compat_addr, IPAddressType addr_type) {
+static duckdb_uhugeint FromCompatAddr(duckdb_hugeint compat_addr, INET_IPAddressType addr_type) {
     duckdb_uhugeint retval;
     memcpy(&retval, &compat_addr, sizeof(duckdb_uhugeint));
     // Only flip the bit for order on IPv6 addresses. It can never be set in IPv4
@@ -97,7 +97,7 @@ static duckdb_uhugeint FromCompatAddr(duckdb_hugeint compat_addr, IPAddressType 
     return retval;
 }
 
-static duckdb_hugeint ToCompatAddr(duckdb_uhugeint new_addr, IPAddressType addr_type) {
+static duckdb_hugeint ToCompatAddr(duckdb_uhugeint new_addr, INET_IPAddressType addr_type) {
     if (addr_type == IP_ADDRESS_V6) {
         // Flip the top bit when storing as a signed hugeint_t so that sorting
         // works correctly.
@@ -128,7 +128,7 @@ static bool inet_to_text_cast_impl(duckdb_function_info info, idx_t count, duckd
     }
     uint64_t* target_validity = duckdb_vector_get_validity(output);
 
-    IPAddress inet;
+    INET_IPAddress inet;
     char buffer[256];
 
     for (idx_t i = 0; i < count; i++) {
@@ -138,7 +138,7 @@ static bool inet_to_text_cast_impl(duckdb_function_info info, idx_t count, duckd
             continue;
         }
 
-        inet.type = (IPAddressType)type_data[i];
+        inet.type = (INET_IPAddressType)type_data[i];
         inet.address = FromCompatAddr(addr_data[i], inet.type);
         inet.mask = mask_data[i];
 
@@ -205,7 +205,7 @@ static bool text_to_inet_cast_impl(duckdb_function_info info, idx_t count, duckd
         size_t size = duckdb_string_t_length(text);
 
         char* error_message = "Failed to parse INET";
-        IPAddress inet = ipaddress_from_string(data,  size, &error_message);
+        INET_IPAddress inet = ipaddress_from_string(data,  size, &error_message);
 
         // Did we succeed in parsing?
         if (inet.type == IP_ADDRESS_INVALID) {
@@ -250,7 +250,7 @@ static void host_function_impl(duckdb_function_info info, duckdb_data_chunk inpu
     }
     uint64_t* target_validity = duckdb_vector_get_validity(output);
 
-    IPAddress inet;
+    INET_IPAddress inet;
     char buffer[256];
 
     for (idx_t i = 0; i < count; i++) {
@@ -260,9 +260,9 @@ static void host_function_impl(duckdb_function_info info, duckdb_data_chunk inpu
             continue;
         }
 
-        inet.type = (IPAddressType)type_data[i];
+        inet.type = (INET_IPAddressType)type_data[i];
         inet.address = FromCompatAddr(addr_data[i], inet.type);
-        inet.mask = inet.type == IP_ADDRESS_V4 ? IPV4_DEFAULT_MASK : IPV6_DEFAULT_MASK;
+        inet.mask = inet.type == IP_ADDRESS_V4 ? 32 : 128;
 
         size_t written = ipaddress_to_string(&inet, buffer, sizeof(buffer));
 
@@ -304,7 +304,7 @@ static void family_function_impl(duckdb_function_info info, duckdb_data_chunk in
             continue;
         }
 
-        switch ((IPAddressType)type_data[i]) {
+        switch ((INET_IPAddressType)type_data[i]) {
             case IP_ADDRESS_V4: output_data[i] = 4; break;
             case IP_ADDRESS_V6: output_data[i] = 6; break;
             default: duckdb_scalar_function_set_error(info, "Invalid IP address type"); return;
@@ -312,7 +312,7 @@ static void family_function_impl(duckdb_function_info info, duckdb_data_chunk in
     }
 }
 
-static void generic_inet_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output, IPAddress(*func)(const IPAddress *ip)) {
+static void generic_inet_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output, INET_IPAddress(*func)(const INET_IPAddress *ip)) {
     idx_t count = duckdb_data_chunk_get_size(input);
 
     duckdb_vector inet_vec = duckdb_data_chunk_get_vector(input, 0);
@@ -355,13 +355,13 @@ static void generic_inet_function_impl(duckdb_function_info info, duckdb_data_ch
             continue;
         }
 
-        IPAddress old_inet = {0};
-        old_inet.type = (IPAddressType)type_data[i];
+        INET_IPAddress old_inet = {0};
+        old_inet.type = (INET_IPAddressType)type_data[i];
         old_inet.address = FromCompatAddr(addr_data[i], old_inet.type);
         old_inet.mask = mask_data[i];
 
         // Apply the function
-        IPAddress new_inet = func(&old_inet);
+        INET_IPAddress new_inet = func(&old_inet);
 
         out_type_data[i] = (uint8_t)new_inet.type;
         out_addr_data[i] = ToCompatAddr(new_inet.address, new_inet.type);
@@ -449,7 +449,7 @@ static void arithmetic_function_impl(duckdb_function_info info, duckdb_data_chun
             continue;
         }
 
-        duckdb_uhugeint address_in = FromCompatAddr(source_addr_data[i], (IPAddressType)source_type_data[i]);
+        duckdb_uhugeint address_in = FromCompatAddr(source_addr_data[i], (INET_IPAddressType)source_type_data[i]);
         duckdb_uhugeint address_out = address_in;
 
         if (hugeint_is_positive(&number)) {
@@ -476,7 +476,7 @@ static void arithmetic_function_impl(duckdb_function_info info, duckdb_data_chun
         }
 
         target_type_data[i] = source_type_data[i];
-        target_addr_data[i] = ToCompatAddr(address_out, (IPAddressType)source_type_data[i]);
+        target_addr_data[i] = ToCompatAddr(address_out, (INET_IPAddressType)source_type_data[i]);
         target_mask_data[i] = source_mask_data[i];
     }
 }
@@ -524,21 +524,21 @@ static void contains_impl(duckdb_vector lhs_inet_vec, duckdb_vector rhs_inet_vec
             continue;
         }
 
-        IPAddress lhs_inet;
-        lhs_inet.type = (IPAddressType)lhs_type_data[i];
+        INET_IPAddress lhs_inet;
+        lhs_inet.type = (INET_IPAddressType)lhs_type_data[i];
         lhs_inet.address = FromCompatAddr(lhs_addr_data[i], lhs_inet.type);
         lhs_inet.mask = lhs_mask_data[i];
 
-        IPAddress rhs_inet;
-        rhs_inet.type = (IPAddressType)rhs_type_data[i];
+        INET_IPAddress rhs_inet;
+        rhs_inet.type = (INET_IPAddressType)rhs_type_data[i];
         rhs_inet.address = FromCompatAddr(rhs_addr_data[i], rhs_inet.type);
         rhs_inet.mask = rhs_mask_data[i];
 
-        IPAddress lhs_network = ipaddress_network(&lhs_inet);
-        IPAddress lhs_broadcast = ipaddress_broadcast(&lhs_inet);
+        INET_IPAddress lhs_network = ipaddress_network(&lhs_inet);
+        INET_IPAddress lhs_broadcast = ipaddress_broadcast(&lhs_inet);
 
-        IPAddress rhs_network = ipaddress_network(&rhs_inet);
-        IPAddress rhs_broadcast = ipaddress_broadcast(&rhs_inet);
+        INET_IPAddress rhs_network = ipaddress_network(&rhs_inet);
+        INET_IPAddress rhs_broadcast = ipaddress_broadcast(&rhs_inet);
 
         // Set the output
         const bool network_in_lower = lhs_network.address.lower >= rhs_network.address.lower;
@@ -730,7 +730,7 @@ static void html_unescape_function_impl(duckdb_function_info info, duckdb_data_c
         size_t input_size = duckdb_string_t_length(html_data[i]);
 
         // Compute the result size
-        size_t result_size = html_unescaped_get_required_size(input_data, input_size);
+        size_t result_size = inet_html_unescaped_get_required_size(input_data, input_size);
 
         // Allocate the result string
         char* result_data = (char*)duckdb_malloc(result_size);
@@ -740,7 +740,7 @@ static void html_unescape_function_impl(duckdb_function_info info, duckdb_data_c
         }
 
         // Now parse again and fill the result string with the unescaped data
-        html_unescape(input_data, input_size, result_data, result_size);
+        inet_html_unescape(input_data, input_size, result_data, result_size);
 
         // Assign the string to the output vector
         duckdb_vector_assign_string_element_len(output, i, result_data, result_size);

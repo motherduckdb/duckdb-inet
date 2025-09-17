@@ -1,7 +1,20 @@
-#include "ip_address.h"
+#include "inet_ipaddress.h"
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+static const int32_t HEX_BITSIZE = 4;
+static const int32_t MAX_QUIBBLE_DIGITS = 4;
+static const size_t QUIBBLES_PER_HALF = 4;
+static const uint64_t IPV4_NETWORK_MASK = 0xffffffff;
+static const duckdb_uhugeint IPV6_NETWORK_MASK = {0xffffffffffffffff, 0xffffffffffffffff};
+
+static const size_t IPV4_DEFAULT_MASK = 32;
+static const size_t IPV6_DEFAULT_MASK = 128;
+static const size_t IPV6_QUIBBLE_BITS = 16;
+static const size_t IPV6_NUM_QUIBBLE = 8;
+
 
 static duckdb_uhugeint uhugeint_shift_right(duckdb_uhugeint lhs, duckdb_uhugeint rhs) {
     duckdb_uhugeint result = lhs;
@@ -86,7 +99,7 @@ static size_t quibble_half_address_bit_shift(size_t quibble, int* is_upper) {
     return quibble_shift * IPV6_QUIBBLE_BITS;
 }
 
-static bool try_parse_ipv4(const char* data, size_t size, IPAddress* result, char** error_message) {
+static bool try_parse_ipv4(const char* data, size_t size, INET_IPAddress* result, char** error_message) {
     size_t c = 0;
     size_t number_count = 0;
     uint32_t address = 0;
@@ -165,7 +178,7 @@ parse_number:
     return true;
 }
 
-static int try_parse_ipv6(const char* data, size_t size, IPAddress* result, char** error_message) {
+static int try_parse_ipv6(const char* data, size_t size, INET_IPAddress* result, char** error_message) {
     size_t c = 0;
     int parsed_quibble_count = 0;
     uint16_t quibbles[IPV6_NUM_QUIBBLE] = {0};
@@ -202,7 +215,7 @@ static int try_parse_ipv6(const char* data, size_t size, IPAddress* result, char
                 return false;
             }
             
-            IPAddress ipv4;
+            INET_IPAddress ipv4;
             if (!try_parse_ipv4(data + start, c - start, &ipv4, error_message)) {
                 return false;
             }
@@ -313,8 +326,8 @@ static int try_parse_ipv6(const char* data, size_t size, IPAddress* result, char
 
 
 // Public function implementations
-IPAddress ipaddress_from_ipv4(int32_t address, uint16_t mask) {
-    IPAddress result;
+INET_IPAddress ipaddress_from_ipv4(int32_t address, uint16_t mask) {
+    INET_IPAddress result;
     result.type = IP_ADDRESS_V4;
     result.address.upper = 0;
     result.address.lower = address;
@@ -322,8 +335,8 @@ IPAddress ipaddress_from_ipv4(int32_t address, uint16_t mask) {
     return result;
 }
 
-IPAddress ipaddress_from_ipv6(duckdb_uhugeint address, uint16_t mask) {
-    IPAddress result;
+INET_IPAddress ipaddress_from_ipv6(duckdb_uhugeint address, uint16_t mask) {
+    INET_IPAddress result;
     result.type = IP_ADDRESS_V6;
     result.address = address;
     result.mask = mask;
@@ -331,7 +344,7 @@ IPAddress ipaddress_from_ipv6(duckdb_uhugeint address, uint16_t mask) {
 }
 
 
-bool ipaddress_try_parse(const char* data, size_t size, IPAddress* result, char** error_message) {
+bool ipaddress_try_parse(const char* data, size_t size, INET_IPAddress* result, char** error_message) {
     size_t c = 0;
     
     // Detect IPv4 vs IPv6
@@ -368,15 +381,15 @@ bool ipaddress_try_parse(const char* data, size_t size, IPAddress* result, char*
     return false;
 }
 
-IPAddress ipaddress_from_string(const char* buffer, size_t buffer_size, char** error_message) {
-    IPAddress result;
+INET_IPAddress ipaddress_from_string(const char* buffer, size_t buffer_size, char** error_message) {
+    INET_IPAddress result;
     if (!ipaddress_try_parse(buffer, buffer_size, &result, error_message)) {
         result.type = IP_ADDRESS_INVALID;
     }
     return result;
 }
 
-static size_t ipadress_to_string_ipv4(const IPAddress *ip, char* buffer, size_t buffer_size) {
+static size_t ipadress_to_string_ipv4(const INET_IPAddress *ip, char* buffer, size_t buffer_size) {
     size_t pos = 0;
     pos += snprintf(buffer + pos, buffer_size - pos, "%u.%u.%u.%u",
                     (uint32_t)((ip->address.lower >> 24) & 0xff),
@@ -389,7 +402,7 @@ static size_t ipadress_to_string_ipv4(const IPAddress *ip, char* buffer, size_t 
     return pos;
 }
 
-static size_t ipaddress_to_string_ipv6(const IPAddress *ip, char* buffer, size_t buffer_size) {
+static size_t ipaddress_to_string_ipv6(const INET_IPAddress *ip, char* buffer, size_t buffer_size) {
     uint16_t quibbles[IPV6_NUM_QUIBBLE];
     size_t zero_run = 0;
     size_t zero_start = 0;
@@ -483,7 +496,7 @@ static size_t ipaddress_to_string_ipv6(const IPAddress *ip, char* buffer, size_t
     return pos;
 }
 
-size_t ipaddress_to_string(const IPAddress *ip, char* buffer, size_t buffer_size) {
+size_t ipaddress_to_string(const INET_IPAddress *ip, char* buffer, size_t buffer_size) {
     switch (ip->type) {
         case IP_ADDRESS_V4:
             return ipadress_to_string_ipv4(ip, buffer, buffer_size);
@@ -495,21 +508,21 @@ size_t ipaddress_to_string(const IPAddress *ip, char* buffer, size_t buffer_size
     }
 }
 
-IPAddress ipaddress_netmask(const IPAddress* ip) {
+INET_IPAddress ipaddress_netmask(const INET_IPAddress* ip) {
     duckdb_uhugeint mask = ip->type == IP_ADDRESS_V4 ? (duckdb_uhugeint){IPV4_NETWORK_MASK, 0} : IPV6_NETWORK_MASK;
     duckdb_uhugeint shift = uhugeint_shift_right(mask, (duckdb_uhugeint){ip->mask, 0});
     duckdb_uhugeint netmask = uhugeint_xor(mask, shift);
 
-    IPAddress result;
+    INET_IPAddress result;
     result.type = ip->type;
     result.address = netmask;
     result.mask = ip->mask;
     return result;
 }
 
-IPAddress ipaddress_network(const IPAddress* ip) {
-    IPAddress netmask = ipaddress_netmask(ip);
-    IPAddress result = {0};
+INET_IPAddress ipaddress_network(const INET_IPAddress* ip) {
+    INET_IPAddress netmask = ipaddress_netmask(ip);
+    INET_IPAddress result = {0};
     result.type = ip->type;
     result.mask = ip->mask;
     result.address.upper = ip->address.upper & netmask.address.upper;
@@ -517,10 +530,10 @@ IPAddress ipaddress_network(const IPAddress* ip) {
     return result;
 }
 
-IPAddress ipaddress_broadcast(const IPAddress* ip) {
-    IPAddress network = ipaddress_network(ip);
-    IPAddress netmask = ipaddress_netmask(ip);
-    IPAddress result = {0};
+INET_IPAddress ipaddress_broadcast(const INET_IPAddress* ip) {
+    INET_IPAddress network = ipaddress_network(ip);
+    INET_IPAddress netmask = ipaddress_netmask(ip);
+    INET_IPAddress result = {0};
     result.type = ip->type;
     result.mask = ip->mask;
     result.address.upper = network.address.upper | (~netmask.address.upper);

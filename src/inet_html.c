@@ -1,4 +1,5 @@
-#include "html_unescape.h"
+#include "inet_html.h"
+#include "inet_html_table.h"
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -6,7 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static bool codepoint_to_utf8(int cp, int *sz, char *c) {
+static bool codepoint_to_utf8(uint32_t cp, uint32_t *sz, char *c) {
     if (cp <= 0x7F) {
         *sz = 1;
         c[0] = cp;
@@ -15,7 +16,6 @@ static bool codepoint_to_utf8(int cp, int *sz, char *c) {
         c[0] = (cp >> 6) + 192;
         c[1] = (cp & 63) + 128;
     } else if (0xd800 <= cp && cp <= 0xdfff) {
-        *sz = -1;
         // invalid block of utf
         return false;
     } else if (cp <= 0xFFFF) {
@@ -30,13 +30,12 @@ static bool codepoint_to_utf8(int cp, int *sz, char *c) {
         c[2] = ((cp >> 6) & 63) + 128;
         c[3] = (cp & 63) + 128;
     } else {
-        *sz = -1;
         return false;
     }
     return true;
 }
 
-static bool decode_codepoint(uint32_t cp, int *sz, char *c) {
+static bool decode_codepoint(uint32_t cp, uint32_t *sz, char *c) {
 
     // Line-feed character
     if (cp == 0x0D) {
@@ -57,7 +56,7 @@ static bool decode_codepoint(uint32_t cp, int *sz, char *c) {
     if (0x80 <= cp && cp <= 0x9F) {
         static const char* map[] = {
             "\u20ac", // EURO SIGN
-            "\\x81",   // UNDEFINED
+            "\\x81",  // UNDEFINED
             "\u201a", // SINGLE LOW-9 QUOTATION MARK
             "\u0192", // LATIN SMALL LETTER F WITH HOOK
             "\u201e", // DOUBLE LOW-9 QUOTATION MARK
@@ -69,10 +68,10 @@ static bool decode_codepoint(uint32_t cp, int *sz, char *c) {
             "\u0160", // LATIN CAPITAL LETTER S WITH CARON
             "\u2039", // SINGLE LEFT-POINTING ANGLE QUOTATION MARK
             "\u0152", // LATIN CAPITAL LIGATURE OE
-            "\\x8d", // UNDEFINED
+            "\\x8d",  // UNDEFINED
             "\u017d", // LATIN CAPITAL LETTER Z WITH CARON
-            "\\x8f", // UNDEFINED
-            "\\x90", // UNDEFINED
+            "\\x8f",  // UNDEFINED
+            "\\x90",  // UNDEFINED
             "\u2018", // LEFT SINGLE QUOTATION MARK
             "\u2019", // RIGHT SINGLE QUOTATION MARK
             "\u201c", // LEFT DOUBLE QUOTATION MARK
@@ -85,7 +84,7 @@ static bool decode_codepoint(uint32_t cp, int *sz, char *c) {
             "\u0161", // LATIN SMALL LETTER S WITH CARON
             "\u203a", // SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
             "\u0153", // LATIN SMALL LIGATURE OE
-            "\\x9d", // UNDEFINED
+            "\\x9d",  // UNDEFINED
             "\u017e", // LATIN SMALL LETTER Z WITH CARON
             "\u0178"  // LATIN CAPITAL LETTER Y WITH DIAERESIS
         };
@@ -109,7 +108,6 @@ static bool decode_codepoint(uint32_t cp, int *sz, char *c) {
     if (0xFDD0 <= cp && cp <= 0xFDEF) {
         return false;
     }
-
     if (cp == 0xb) {
         return false;
     }
@@ -128,7 +126,6 @@ static bool decode_codepoint(uint32_t cp, int *sz, char *c) {
     // Try to convert to utf-8
     return codepoint_to_utf8(cp, sz, c);
 }
-
 
 static const char* decode_entity(const char* beg, const char* end, uint32_t *cp1, uint32_t *cp2) {
     const char* pos = beg;
@@ -187,9 +184,9 @@ static const char* decode_entity(const char* beg, const char* end, uint32_t *cp1
             }
             size_t len = pos - name_beg;
             if (len > 0) {
-                struct html_named_entity* entity = NULL;
+                INET_HTMLEntity* entity = NULL;
                 if (pos < end && *pos == ';') {
-                    entity = html_named_entity_lookup(name_beg, len + 1);
+                    entity = inet_html_entity_lookup(name_beg, len + 1);
                     if (entity) {
                         // Valid named entity with semicolon
                         *cp1 = entity->codepoints[0];
@@ -199,7 +196,7 @@ static const char* decode_entity(const char* beg, const char* end, uint32_t *cp1
                 } else if (pos == end || !isalnum((unsigned char)*pos)) {
                     // No semicolon, try to look for longest match
                     do {
-                        entity = html_named_entity_lookup(name_beg, len);
+                        entity = inet_html_entity_lookup(name_beg, len);
                         if (entity) {
                             *cp1 = entity->codepoints[0];
                             *cp2 = entity->codepoints[1];
@@ -219,27 +216,27 @@ static const char* decode_entity(const char* beg, const char* end, uint32_t *cp1
 }
 
 typedef void(*html_decode_handle_func)(char* data, size_t size, void *ctx);
-static void decode_html_generic(const char* data, size_t size, html_decode_handle_func handler, void *ctx) {
+
+static void decode_html_impl(const char* data, size_t size, html_decode_handle_func handler, void *ctx) {
 
     const char* end = data + size;
     const char* pos = data;
 
     while (pos < end) {
 
-        uint32_t    code[2] = {0, 0};
-        char        text_data[8];
-        size_t      text_size = 0;
+        uint32_t code[2] = {0, 0};
+        char text_data[8];
+        size_t text_size = 0;
 
         pos = decode_entity(pos, end, &code[0], &code[1]);
 
         for (int i = 0; i < 2; i++) {
             if (i == 1 && code[i] == 0) {
+                // This isn't super clean - if the second codepoint is 0, skip it.
                 break;
             }
-            int len = 0;
-            if (!decode_codepoint(code[i], &len, text_data + text_size)) {
-                // TODO: throw error!
-            }
+            uint32_t len = 0;
+            decode_codepoint(code[i], &len, text_data + text_size);
             text_size += len;
         }
 
@@ -259,14 +256,14 @@ static void html_entity_replace_handler(char* data, size_t size, void *ctx) {
     *result_data += size;
 }
 
-size_t html_unescaped_get_required_size(const char* input_data, size_t input_size) {
+size_t inet_html_unescaped_get_required_size(const char* input_data, size_t input_size) {
     // Compute the result size
     size_t result_size = 0;
-    decode_html_generic(input_data, input_size, html_entity_get_size_handler, &result_size);
+    decode_html_impl(input_data, input_size, html_entity_get_size_handler, &result_size);
     return result_size;
 }
 
-void html_unescape(const char* input_data, size_t input_size, char* result_data, size_t result_size) {
+void inet_html_unescape(const char* input_data, size_t input_size, char* result_data, size_t result_size) {
     // Now parse again and fill the result string with the unescaped data
-    decode_html_generic(input_data, input_size, html_entity_replace_handler, &result_data);
+    decode_html_impl(input_data, input_size, html_entity_replace_handler, &result_data);
 }

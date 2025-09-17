@@ -2242,12 +2242,12 @@ GPERF_INPUT = """
 %{ 
 #include <stdint.h>
 #include <string.h>
-#include "html_unescape.h"
+#include "inet_html_table.h"
 %}
-%define lookup-function-name html_named_entity_lookup
+%define lookup-function-name inet_html_entity_lookup
 %compare-strncmp
 %struct-type
-struct html_named_entity;
+struct INET_HTMLEntity;
 %%
 """
 
@@ -2267,7 +2267,7 @@ GPERF_INPUT += "%%\n"
 
 # Launch gperf as a subprocess and pipe the input to it
 # And pipe the output to a file
-with open("html_entity_lookup.c", "w") as f:
+with open("inet_html_table.c", "w") as f:
     process = subprocess.Popen(
         ["gperf", "-L", "ANSI-C"],
         stdin=subprocess.PIPE,

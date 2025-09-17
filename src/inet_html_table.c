@@ -32,8 +32,8 @@
  
 #include <stdint.h>
 #include <string.h>
-#include "html_unescape.h"
-struct html_named_entity;
+#include "inet_html_table.h"
+struct INET_HTMLEntity;
 
 #define TOTAL_KEYWORDS 2231
 #define MIN_WORD_LENGTH 2
@@ -50,7 +50,7 @@ inline
 #endif
 #endif
 static unsigned int
-hash (register const char *str, register unsigned int len)
+hash (const char *str, size_t len)
 {
   static unsigned short asso_values[] =
     {
@@ -82,7 +82,7 @@ hash (register const char *str, register unsigned int len)
       15512, 15512, 15512, 15512, 15512, 15512, 15512, 15512, 15512, 15512,
       15512, 15512, 15512, 15512, 15512, 15512, 15512, 15512, 15512
     };
-  register unsigned int hval = len;
+  unsigned int hval = len;
 
   switch (hval)
     {
@@ -124,10 +124,10 @@ hash (register const char *str, register unsigned int len)
   return hval;
 }
 
-struct html_named_entity *
-html_named_entity_lookup (const char *str, size_t len)
+struct INET_HTMLEntity *
+inet_html_entity_lookup (const char *str, size_t len)
 {
-  static struct html_named_entity wordlist[] =
+  static struct INET_HTMLEntity wordlist[] =
     {
       {""}, {""},
       {"gt", {62, 0}},
@@ -4868,7 +4868,7 @@ html_named_entity_lookup (const char *str, size_t len)
 
       if (key <= MAX_HASH_VALUE)
         {
-          register const char *s = wordlist[key].name;
+          const char *s = wordlist[key].name;
 
           if (*str == *s && !strncmp (str + 1, s + 1, len - 1) && s[len] == '\0')
             return &wordlist[key];
