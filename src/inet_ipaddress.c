@@ -103,11 +103,14 @@ static bool try_parse_ipv4(const char* data, size_t size, INET_IPAddress* result
     size_t c = 0;
     size_t number_count = 0;
     uint32_t address = 0;
+    size_t start = 0;
+
     result->type = IP_ADDRESS_V4;
 
 parse_number:
 
-    size_t start = c;
+    start = c;
+
     while (c < size && data[c] >= '0' && data[c] <= '9') {
         c++;
     }
