@@ -893,6 +893,12 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 		access->set_error(info, "Failed to register <<= function");
 		goto cleanup;
 	}
+	duckdb_scalar_function_set_name(contains_left_function, "subnet_contained_by_or_equals");
+	success = duckdb_register_scalar_function(connection, contains_left_function) == DuckDBSuccess;
+	if (!success) {
+		access->set_error(info, "Failed to register subnet_contained_by_or_equals function");
+		goto cleanup;
+	}
 
 	duckdb_scalar_function contains_right_function = duckdb_create_scalar_function();
 	duckdb_scalar_function_set_name(contains_right_function, ">>=");
@@ -903,6 +909,12 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	success = duckdb_register_scalar_function(connection, contains_right_function) == DuckDBSuccess;
 	if (!success) {
 		access->set_error(info, "Failed to register >>= function");
+		goto cleanup;
+	}
+	duckdb_scalar_function_set_name(contains_right_function, "subnet_contains_or_equals");
+	success = duckdb_register_scalar_function(connection, contains_right_function) == DuckDBSuccess;
+	if (!success) {
+		access->set_error(info, "Failed to register subnet_contains_or_equals function");
 		goto cleanup;
 	}
 
