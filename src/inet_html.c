@@ -55,38 +55,38 @@ static bool decode_codepoint(uint32_t cp, uint32_t *sz, char *c) {
 	// Special character references
 	if (0x80 <= cp && cp <= 0x9F) {
 		static const char *map[] = {
-		    "\u20ac", // EURO SIGN
-		    "\\x81",  // UNDEFINED
-		    "\u201a", // SINGLE LOW-9 QUOTATION MARK
-		    "\u0192", // LATIN SMALL LETTER F WITH HOOK
-		    "\u201e", // DOUBLE LOW-9 QUOTATION MARK
-		    "\u2026", // HORIZONTAL ELLIPSIS
-		    "\u2020", // DAGGER
-		    "\u2021", // DOUBLE DAGGER
-		    "\u02c6", // MODIFIER LETTER CIRCUMFLEX ACCENT
-		    "\u2030", // PER MILLE SIGN
-		    "\u0160", // LATIN CAPITAL LETTER S WITH CARON
-		    "\u2039", // SINGLE LEFT-POINTING ANGLE QUOTATION MARK
-		    "\u0152", // LATIN CAPITAL LIGATURE OE
-		    "\\x8d",  // UNDEFINED
-		    "\u017d", // LATIN CAPITAL LETTER Z WITH CARON
-		    "\\x8f",  // UNDEFINED
-		    "\\x90",  // UNDEFINED
-		    "\u2018", // LEFT SINGLE QUOTATION MARK
-		    "\u2019", // RIGHT SINGLE QUOTATION MARK
-		    "\u201c", // LEFT DOUBLE QUOTATION MARK
-		    "\u201d", // RIGHT DOUBLE QUOTATION MARK
-		    "\u2022", // BULLET
-		    "\u2013", // EN DASH
-		    "\u2014", // EM DASH
-		    "\u02dc", // SMALL TILDE
-		    "\u2122", // TRADE MARK SIGN
-		    "\u0161", // LATIN SMALL LETTER S WITH CARON
-		    "\u203a", // SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
-		    "\u0153", // LATIN SMALL LIGATURE OE
-		    "\\x9d",  // UNDEFINED
-		    "\u017e", // LATIN SMALL LETTER Z WITH CARON
-		    "\u0178"  // LATIN CAPITAL LETTER Y WITH DIAERESIS
+			"\xE2\x82\xAC", // EURO SIGN
+		    "\\x81",		// UNDEFINED
+			"\xE2\x80\x9A", // SINGLE LOW-9 QUOTATION MARK
+			"\xC6\x92",		// LATIN SMALL LETTER F WITH HOOK
+			"\xE2\x80\x9E", // DOUBLE LOW-9 QUOTATION MARK
+			"\xE2\x80\xA6", // HORIZONTAL ELLIPSIS
+			"\xE2\x80\xA0", // DAGGER
+			"\xE2\x80\xA1", // DOUBLE DAGGER
+			"\xCB\x86",		// MODIFIER LETTER CIRCUMFLEX ACCENT
+			"\xE2\x80\xB0", // PER MILLE SIGN
+			"\xC5\xA0",		// LATIN CAPITAL LETTER S WITH CARON
+			"\xE2\x80\xB9", // SINGLE LEFT-POINTING ANGLE QUOTATION MARK
+			"\xC5\x92",		// LATIN CAPITAL LIGATURE O
+			"\\x8d",		// UNDEFINED
+			"\xC5\xBD",		// LATIN CAPITAL LETTER Z WITH CARON
+			"\\x8f",		// UNDEFINED
+			"\\x90",		// UNDEFINED
+			"\xE2\x80\x98", // LEFT SINGLE QUOTATION MARK
+			"\xE2\x80\x99", // RIGHT SINGLE QUOTATION MARK
+			"\xE2\x80\x9C", // LEFT DOUBLE QUOTATION MARK
+			"\xE2\x80\x9D", // RIGHT DOUBLE QUOTATION MARK
+			"\xE2\x80\xA2", // BULLET
+			"\xE2\x80\x93", // EN DASH
+			"\xE2\x80\x94", // EM DASH
+			"\xCB\x9C",		// SMALL TILDE
+			"\xE2\x84\xA2", // TRADE MARK SIGN
+			"\xC5\xA1",		// LATIN SMALL LETTER S WITH CARON
+			"\xE2\x80\xBA", // SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
+			"\xC5\x93",		// LATIN SMALL LIGATURE OE
+			"\\x9d",		// UNDEFINED
+			"\xC5\xBE",		// LATIN SMALL LETTER Z WITH CARON
+			"\xC5\xB8"		// LATIN CAPITAL LETTER Y WITH DIAERESIS
 		};
 		const char *str = map[cp - 0x80];
 		size_t len = strlen(str);
