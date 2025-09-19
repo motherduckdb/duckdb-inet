@@ -4,6 +4,10 @@
 
 require inet
 
+#FIXME: The python sqllogic unittest runner doesnt free file handles quick enough to work
+#on the slow windows FS on our CI runners. When this is fixed, we can remove this line.
+require notwindows
+
 # load the DB from disk
 load __TEST_DIR__/store_ipv6_inet.db
 

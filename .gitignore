@@ -1,2 +1,7 @@
-build/
-duckdb_unittest_tempdir/
+cmake_build
+build
+configure
+.idea
+duckdb_unittest_tempdir
+/test/bin
+venv
