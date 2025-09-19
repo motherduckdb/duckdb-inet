@@ -47,7 +47,7 @@ static bool decode_codepoint(uint32_t cp, uint32_t *sz, char *c) {
 	// Replacement character
 	if (cp == 0x00 || (0xD800 <= cp && cp <= 0xDFFF) || 0x10FFFF < cp) {
 		// Return the replacement character
-		memcpy(c, "\uFFFD", 3);
+		memcpy(c, "\xEF\xBF\xBD", 3);
 		*sz = 3;
 		return true;
 	}
