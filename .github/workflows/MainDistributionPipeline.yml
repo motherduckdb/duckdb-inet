@@ -20,3 +20,14 @@ jobs:
       ci_tools_version: main
       extension_name: inet
       extra_toolchains: python3
+
+  duckdb-deploy:
+    name: Deploy extension binaries
+    needs: duckdb-build
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_deploy.yml@main
+    secrets: inherit
+    with:
+      duckdb_version: main
+      ci_tools_version: main
+      extension_name: inet
+      deploy_latest: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
