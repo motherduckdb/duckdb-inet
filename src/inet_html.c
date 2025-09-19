@@ -91,7 +91,7 @@ static bool decode_codepoint(uint32_t cp, uint32_t *sz, char *c) {
 		const char *str = map[cp - 0x80];
 		size_t len = strlen(str);
 		memcpy(c, str, len);
-		*sz = (int)len;
+		*sz = (uint32_t)len;
 		return true;
 	}
 
@@ -224,7 +224,7 @@ static void decode_html_impl(const char *data, size_t size, html_decode_handle_f
 	while (pos < end) {
 
 		uint32_t code[2] = {0, 0};
-		char text_data[8];
+		char text_data[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 		size_t text_size = 0;
 
 		pos = decode_entity(pos, end, &code[0], &code[1]);
