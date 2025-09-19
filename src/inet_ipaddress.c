@@ -13,7 +13,8 @@ static const duckdb_uhugeint IPV6_NETWORK_MASK = {0xffffffffffffffff, 0xffffffff
 static const size_t IPV4_DEFAULT_MASK = 32;
 static const size_t IPV6_DEFAULT_MASK = 128;
 static const size_t IPV6_QUIBBLE_BITS = 16;
-static const size_t IPV6_NUM_QUIBBLE = 8;
+
+#define INET_IPV6_NUM_QUIBBLE (8)
 
 static duckdb_uhugeint uhugeint_shift_right(duckdb_uhugeint lhs, duckdb_uhugeint rhs) {
 	duckdb_uhugeint result = lhs;
@@ -189,13 +190,13 @@ parse_mask:
 static int try_parse_ipv6(const char *data, size_t size, INET_IPAddress *result, char **error_message) {
 	size_t c = 0;
 	int parsed_quibble_count = 0;
-	uint16_t quibbles[IPV6_NUM_QUIBBLE] = {0};
+	uint16_t quibbles[INET_IPV6_NUM_QUIBBLE] = {};
 	int first_quibble_count = -1;
 
 	result->type = INET_IP_ADDRESS_V6;
 	result->mask = IPV6_DEFAULT_MASK;
 
-	while (c < size && parsed_quibble_count < IPV6_NUM_QUIBBLE) {
+	while (c < size && parsed_quibble_count < INET_IPV6_NUM_QUIBBLE) {
 		size_t start = c;
 		while (c < size && is_hex_char(data[c])) {
 			c++;
@@ -290,7 +291,7 @@ static int try_parse_ipv6(const char *data, size_t size, INET_IPAddress *result,
 		c++;
 	}
 
-	if (parsed_quibble_count < IPV6_NUM_QUIBBLE && first_quibble_count == -1) {
+	if (parsed_quibble_count < INET_IPV6_NUM_QUIBBLE && first_quibble_count == -1) {
 		if (error_message) {
 			*error_message = "Expected 8 sets of 4 hex digits.";
 		}
@@ -310,7 +311,7 @@ static int try_parse_ipv6(const char *data, size_t size, INET_IPAddress *result,
 	size_t output_idx = 0;
 	for (int parsed_idx = 0; parsed_idx < parsed_quibble_count; parsed_idx++, output_idx++) {
 		if (parsed_idx == first_quibble_count) {
-			int missing_quibbles = IPV6_NUM_QUIBBLE - parsed_quibble_count;
+			int missing_quibbles = INET_IPV6_NUM_QUIBBLE - parsed_quibble_count;
 			if (missing_quibbles == 0) {
 				if (error_message) {
 					*error_message = "Invalid double-colon, too many hex digits.";
@@ -407,16 +408,16 @@ static size_t ipadress_to_string_ipv4(const INET_IPAddress *ip, char *buffer, si
 }
 
 static size_t ipaddress_to_string_ipv6(const INET_IPAddress *ip, char *buffer, size_t buffer_size) {
-	uint16_t quibbles[IPV6_NUM_QUIBBLE];
+	uint16_t quibbles[INET_IPV6_NUM_QUIBBLE];
 	size_t zero_run = 0;
 	size_t zero_start = 0;
 	// The total number of quibbles can't be a start index, so use it to track
 	// when a zero run is not in progress.
-	size_t this_zero_start = IPV6_NUM_QUIBBLE;
+	size_t this_zero_start = INET_IPV6_NUM_QUIBBLE;
 
 	// Convert the packed bits into quibbles while looking for the maximum run of
 	// zeros
-	for (size_t i = 0; i < IPV6_NUM_QUIBBLE; ++i) {
+	for (size_t i = 0; i < INET_IPV6_NUM_QUIBBLE; ++i) {
 		int is_upper;
 		size_t bitshift = quibble_half_address_bit_shift(i, &is_upper);
 		// Operate on each half separately to make the bit operations more
@@ -427,9 +428,9 @@ static size_t ipaddress_to_string_ipv6(const INET_IPAddress *ip, char *buffer, s
 			quibbles[i] = (uint16_t)((ip->address.lower >> bitshift) & 0xFFFF);
 		}
 
-		if (quibbles[i] == 0 && this_zero_start == IPV6_NUM_QUIBBLE) {
+		if (quibbles[i] == 0 && this_zero_start == INET_IPV6_NUM_QUIBBLE) {
 			this_zero_start = i;
-		} else if (quibbles[i] != 0 && this_zero_start != IPV6_NUM_QUIBBLE) {
+		} else if (quibbles[i] != 0 && this_zero_start != INET_IPV6_NUM_QUIBBLE) {
 			// This is the end of the current run of zero quibbles
 			size_t this_run = i - this_zero_start;
 			// Save this run if it is larger than previous runs. If it is equal,
@@ -440,13 +441,13 @@ static size_t ipaddress_to_string_ipv6(const INET_IPAddress *ip, char *buffer, s
 				zero_run = this_run;
 				zero_start = this_zero_start;
 			}
-			this_zero_start = IPV6_NUM_QUIBBLE;
+			this_zero_start = INET_IPV6_NUM_QUIBBLE;
 		}
 	}
 
 	// Handle a zero run through the end of the address
-	if (this_zero_start != IPV6_NUM_QUIBBLE) {
-		size_t this_run = IPV6_NUM_QUIBBLE - this_zero_start;
+	if (this_zero_start != INET_IPV6_NUM_QUIBBLE) {
+		size_t this_run = INET_IPV6_NUM_QUIBBLE - this_zero_start;
 		if (this_run > 1 && this_run > zero_run) {
 			zero_run = this_run;
 			zero_start = this_zero_start;
@@ -456,7 +457,7 @@ static size_t ipaddress_to_string_ipv6(const INET_IPAddress *ip, char *buffer, s
 	size_t zero_end = zero_start + zero_run;
 	size_t pos = 0;
 
-	for (size_t i = 0; i < IPV6_NUM_QUIBBLE; ++i) {
+	for (size_t i = 0; i < INET_IPV6_NUM_QUIBBLE; ++i) {
 		if (i > 0) {
 			pos += snprintf(buffer + pos, buffer_size - pos, ":");
 		}
@@ -470,7 +471,7 @@ static size_t ipaddress_to_string_ipv6(const INET_IPAddress *ip, char *buffer, s
 			i = zero_end - 1;
 
 			// Handle the special case of the run being at the end
-			if (i == IPV6_NUM_QUIBBLE - 1) {
+			if (i == INET_IPV6_NUM_QUIBBLE - 1) {
 				pos += snprintf(buffer + pos, buffer_size - pos, ":");
 			}
 		} else if (
@@ -526,7 +527,7 @@ INET_IPAddress ipaddress_netmask(const INET_IPAddress *ip) {
 
 INET_IPAddress ipaddress_network(const INET_IPAddress *ip) {
 	INET_IPAddress netmask = ipaddress_netmask(ip);
-	INET_IPAddress result = {0};
+	INET_IPAddress result = {};
 	result.type = ip->type;
 	result.mask = ip->mask;
 	result.address.upper = ip->address.upper & netmask.address.upper;
@@ -537,7 +538,7 @@ INET_IPAddress ipaddress_network(const INET_IPAddress *ip) {
 INET_IPAddress ipaddress_broadcast(const INET_IPAddress *ip) {
 	INET_IPAddress network = ipaddress_network(ip);
 	INET_IPAddress netmask = ipaddress_netmask(ip);
-	INET_IPAddress result = {0};
+	INET_IPAddress result = {};
 	result.type = ip->type;
 	result.mask = ip->mask;
 	result.address.upper = network.address.upper | (~netmask.address.upper);

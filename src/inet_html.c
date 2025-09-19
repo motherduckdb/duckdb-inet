@@ -161,7 +161,7 @@ static const char *decode_entity(const char *beg, const char *end, uint32_t *cp1
 					*cp2 = 0;
 					return num_end + 1;
 				}
-				if (base == 10 && !isnumber((unsigned char)*num_end)) {
+				if (base == 10 && !isdigit((unsigned char)*num_end)) {
 					// If no semicolon, but not followed by a number, still parseable
 					*cp1 = (uint32_t)value;
 					*cp2 = 0;
