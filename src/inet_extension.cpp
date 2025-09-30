@@ -10,6 +10,7 @@
 // Forward declare vtable
 DUCKDB_EXTENSION_EXTERN
 
+#include "duckdb/stable/extension_loader.hpp"
 #include "duckdb/stable/logical_type.hpp"
 
 using namespace duckdb_stable;
@@ -755,239 +756,229 @@ static void html_unescape_function_impl(duckdb_function_info info, duckdb_data_c
 	}
 }
 
+class INetLoader : public ExtensionLoader {
+public:
+	INetLoader(duckdb_connection con, duckdb_extension_info info,
+                            struct duckdb_extension_access *access) :
+		ExtensionLoader(con, info, access) {
+	}
+
+protected:
+	void Load() override {
+		duckdb_cast_function inet_to_text = nullptr;
+		duckdb_cast_function text_to_inet = nullptr;
+		duckdb_scalar_function host_function = nullptr;
+		duckdb_scalar_function family_function = nullptr;
+		duckdb_scalar_function netmask_function = nullptr;
+		duckdb_scalar_function network_function = nullptr;
+		duckdb_scalar_function broadcast_function = nullptr;
+		duckdb_scalar_function add_function = nullptr;
+		duckdb_scalar_function sub_function = nullptr;
+		duckdb_scalar_function contains_left_function = nullptr;
+		duckdb_scalar_function contains_right_function = nullptr;
+		duckdb_scalar_function_set html_escape_function_set = nullptr;
+		duckdb_scalar_function html_escape_function = nullptr;
+		duckdb_scalar_function html_escape_quote_function = nullptr;
+		duckdb_scalar_function html_unescape_function = nullptr;
+		bool success = true;
+
+		auto inet_type = make_inet_type();
+		auto text_type = LogicalType::VARCHAR();
+		auto bool_type = LogicalType::BOOLEAN();
+		auto utinyint_type = LogicalType::UTINYINT();
+		auto hugeint_type = LogicalType::HUGEINT();
+
+		// Register the type
+		success = duckdb_register_logical_type(connection, inet_type.c_type(), NULL) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register INET type");
+		}
+
+		// Register cast functions
+		inet_to_text = duckdb_create_cast_function();
+		duckdb_cast_function_set_implicit_cast_cost(inet_to_text, -1);
+		duckdb_cast_function_set_source_type(inet_to_text, inet_type.c_type());
+		duckdb_cast_function_set_target_type(inet_to_text, text_type.c_type());
+		duckdb_cast_function_set_function(inet_to_text, inet_to_text_cast_impl);
+
+		success = duckdb_register_cast_function(connection, inet_to_text) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register INET to TEXT cast function");
+		}
+
+		text_to_inet = duckdb_create_cast_function();
+		duckdb_cast_function_set_implicit_cast_cost(text_to_inet, -1);
+		duckdb_cast_function_set_source_type(text_to_inet, text_type.c_type());
+		duckdb_cast_function_set_target_type(text_to_inet, inet_type.c_type());
+		duckdb_cast_function_set_function(text_to_inet, text_to_inet_cast_impl);
+
+		success = duckdb_register_cast_function(connection, text_to_inet) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register TEXT to INET cast function");
+		}
+
+		// Scalar functions
+		host_function = duckdb_create_scalar_function();
+		duckdb_scalar_function_set_name(host_function, "host");
+		duckdb_scalar_function_add_parameter(host_function, inet_type.c_type());
+		duckdb_scalar_function_set_return_type(host_function, text_type.c_type());
+		duckdb_scalar_function_set_function(host_function, host_function_impl);
+		success = duckdb_register_scalar_function(connection, host_function) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register host function");
+		}
+
+		family_function = duckdb_create_scalar_function();
+		duckdb_scalar_function_set_name(family_function, "family");
+		duckdb_scalar_function_add_parameter(family_function, inet_type.c_type());
+		duckdb_scalar_function_set_return_type(family_function, utinyint_type.c_type());
+		duckdb_scalar_function_set_function(family_function, family_function_impl);
+		success = duckdb_register_scalar_function(connection, family_function) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register family function");
+		}
+
+		netmask_function = duckdb_create_scalar_function();
+		duckdb_scalar_function_set_name(netmask_function, "netmask");
+		duckdb_scalar_function_add_parameter(netmask_function, inet_type.c_type());
+		duckdb_scalar_function_set_return_type(netmask_function, inet_type.c_type());
+		duckdb_scalar_function_set_function(netmask_function, netmask_function_impl);
+		success = duckdb_register_scalar_function(connection, netmask_function) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register net mask function");
+		}
+
+		network_function = duckdb_create_scalar_function();
+		duckdb_scalar_function_set_name(network_function, "network");
+		duckdb_scalar_function_add_parameter(network_function, inet_type.c_type());
+		duckdb_scalar_function_set_return_type(network_function, inet_type.c_type());
+		duckdb_scalar_function_set_function(network_function, network_function_impl);
+		success = duckdb_register_scalar_function(connection, network_function) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register network function");
+		}
+
+		broadcast_function = duckdb_create_scalar_function();
+		duckdb_scalar_function_set_name(broadcast_function, "broadcast");
+		duckdb_scalar_function_add_parameter(broadcast_function, inet_type.c_type());
+		duckdb_scalar_function_set_return_type(broadcast_function, inet_type.c_type());
+		duckdb_scalar_function_set_function(broadcast_function, broadcast_function_impl);
+		success = duckdb_register_scalar_function(connection, broadcast_function) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register broadcast function");
+		}
+
+		add_function = duckdb_create_scalar_function();
+		duckdb_scalar_function_set_name(add_function, "+");
+		duckdb_scalar_function_add_parameter(add_function, inet_type.c_type());
+		duckdb_scalar_function_add_parameter(add_function, hugeint_type.c_type());
+		duckdb_scalar_function_set_return_type(add_function, inet_type.c_type());
+		duckdb_scalar_function_set_function(add_function, add_function_impl);
+		success = duckdb_register_scalar_function(connection, add_function) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register + function");
+		}
+
+		sub_function = duckdb_create_scalar_function();
+		duckdb_scalar_function_set_name(sub_function, "-");
+		duckdb_scalar_function_add_parameter(sub_function, inet_type.c_type());
+		duckdb_scalar_function_add_parameter(sub_function, hugeint_type.c_type());
+		duckdb_scalar_function_set_return_type(sub_function, inet_type.c_type());
+		duckdb_scalar_function_set_function(sub_function, sub_function_impl);
+		success = duckdb_register_scalar_function(connection, sub_function) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register - function");
+		}
+
+		contains_left_function = duckdb_create_scalar_function();
+		duckdb_scalar_function_set_name(contains_left_function, "<<=");
+		duckdb_scalar_function_add_parameter(contains_left_function, inet_type.c_type());
+		duckdb_scalar_function_add_parameter(contains_left_function, inet_type.c_type());
+		duckdb_scalar_function_set_return_type(contains_left_function, bool_type.c_type());
+		duckdb_scalar_function_set_function(contains_left_function, contains_left_function_impl);
+		success = duckdb_register_scalar_function(connection, contains_left_function) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register <<= function");
+		}
+		duckdb_scalar_function_set_name(contains_left_function, "subnet_contained_by_or_equals");
+		success = duckdb_register_scalar_function(connection, contains_left_function) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register subnet_contained_by_or_equals function");
+		}
+
+		contains_right_function = duckdb_create_scalar_function();
+		duckdb_scalar_function_set_name(contains_right_function, ">>=");
+		duckdb_scalar_function_add_parameter(contains_right_function, inet_type.c_type());
+		duckdb_scalar_function_add_parameter(contains_right_function, inet_type.c_type());
+		duckdb_scalar_function_set_return_type(contains_right_function, bool_type.c_type());
+		duckdb_scalar_function_set_function(contains_right_function, contains_right_function_impl);
+		success = duckdb_register_scalar_function(connection, contains_right_function) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register >>= function");
+		}
+		duckdb_scalar_function_set_name(contains_right_function, "subnet_contains_or_equals");
+		success = duckdb_register_scalar_function(connection, contains_right_function) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register subnet_contains_or_equals function");
+		}
+
+		html_escape_function_set = duckdb_create_scalar_function_set("html_escape");
+		html_escape_function = duckdb_create_scalar_function();
+		duckdb_scalar_function_set_name(html_escape_function, "html_escape");
+		duckdb_scalar_function_set_return_type(html_escape_function, text_type.c_type());
+		duckdb_scalar_function_add_parameter(html_escape_function, text_type.c_type());
+		duckdb_scalar_function_set_function(html_escape_function, html_escape_function_impl);
+		duckdb_add_scalar_function_to_set(html_escape_function_set, html_escape_function);
+
+		html_escape_quote_function = duckdb_create_scalar_function();
+		duckdb_scalar_function_set_name(html_escape_quote_function, "html_escape");
+		duckdb_scalar_function_set_return_type(html_escape_quote_function, text_type.c_type());
+		duckdb_scalar_function_add_parameter(html_escape_quote_function, text_type.c_type());
+		duckdb_scalar_function_add_parameter(html_escape_quote_function, bool_type.c_type());
+		duckdb_scalar_function_set_function(html_escape_quote_function, html_escape_quoute_function_impl);
+		duckdb_add_scalar_function_to_set(html_escape_function_set, html_escape_quote_function);
+
+		success = duckdb_register_scalar_function_set(connection, html_escape_function_set) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register html_escape function");
+		}
+
+		html_unescape_function = duckdb_create_scalar_function();
+		duckdb_scalar_function_set_name(html_unescape_function, "html_unescape");
+		duckdb_scalar_function_set_return_type(html_unescape_function, text_type.c_type());
+		duckdb_scalar_function_add_parameter(html_unescape_function, text_type.c_type());
+		duckdb_scalar_function_set_function(html_unescape_function, html_unescape_function_impl);
+		success = duckdb_register_scalar_function(connection, html_unescape_function) == DuckDBSuccess;
+		if (!success) {
+			throw std::runtime_error("Failed to register html_unescape function");
+		}
+
+		duckdb_destroy_cast_function(&text_to_inet);
+		duckdb_destroy_cast_function(&inet_to_text);
+
+		duckdb_destroy_scalar_function(&host_function);
+		duckdb_destroy_scalar_function(&family_function);
+		duckdb_destroy_scalar_function(&netmask_function);
+		duckdb_destroy_scalar_function(&network_function);
+		duckdb_destroy_scalar_function(&broadcast_function);
+		duckdb_destroy_scalar_function(&add_function);
+		duckdb_destroy_scalar_function(&sub_function);
+		duckdb_destroy_scalar_function(&contains_left_function);
+		duckdb_destroy_scalar_function(&contains_right_function);
+
+		duckdb_destroy_scalar_function(&html_escape_function);
+		duckdb_destroy_scalar_function(&html_escape_quote_function);
+		duckdb_destroy_scalar_function_set(&html_escape_function_set);
+		duckdb_destroy_scalar_function(&html_unescape_function);
+	}
+};
+
 //----------------------------------------------------------------------------------------------------------------------
 // EXTENSION ENTRY
 //----------------------------------------------------------------------------------------------------------------------
 
-DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info info,
+DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection con, duckdb_extension_info info,
                             struct duckdb_extension_access *access) {
-	duckdb_cast_function inet_to_text = nullptr;
-	duckdb_cast_function text_to_inet = nullptr;
-	duckdb_scalar_function host_function = nullptr;
-	duckdb_scalar_function family_function = nullptr;
-	duckdb_scalar_function netmask_function = nullptr;
-	duckdb_scalar_function network_function = nullptr;
-	duckdb_scalar_function broadcast_function = nullptr;
-	duckdb_scalar_function add_function = nullptr;
-	duckdb_scalar_function sub_function = nullptr;
-	duckdb_scalar_function contains_left_function = nullptr;
-	duckdb_scalar_function contains_right_function = nullptr;
-	duckdb_scalar_function_set html_escape_function_set = nullptr;
-	duckdb_scalar_function html_escape_function = nullptr;
-	duckdb_scalar_function html_escape_quote_function = nullptr;
-	duckdb_scalar_function html_unescape_function = nullptr;
-	bool success = true;
-
-	auto inet_type = make_inet_type();
-	auto text_type = LogicalType::VARCHAR();
-	auto bool_type = LogicalType::BOOLEAN();
-	auto utinyint_type = LogicalType::UTINYINT();
-	auto hugeint_type = LogicalType::HUGEINT();
-
-	// Register the type
-	success = duckdb_register_logical_type(connection, inet_type.c_type(), NULL) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register INET type");
-		goto cleanup;
-	}
-
-	// Register cast functions
-	inet_to_text = duckdb_create_cast_function();
-	duckdb_cast_function_set_implicit_cast_cost(inet_to_text, -1);
-	duckdb_cast_function_set_source_type(inet_to_text, inet_type.c_type());
-	duckdb_cast_function_set_target_type(inet_to_text, text_type.c_type());
-	duckdb_cast_function_set_function(inet_to_text, inet_to_text_cast_impl);
-
-	success = duckdb_register_cast_function(connection, inet_to_text) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register INET to TEXT cast function");
-		goto cleanup;
-	}
-
-	text_to_inet = duckdb_create_cast_function();
-	duckdb_cast_function_set_implicit_cast_cost(text_to_inet, -1);
-	duckdb_cast_function_set_source_type(text_to_inet, text_type.c_type());
-	duckdb_cast_function_set_target_type(text_to_inet, inet_type.c_type());
-	duckdb_cast_function_set_function(text_to_inet, text_to_inet_cast_impl);
-
-	success = duckdb_register_cast_function(connection, text_to_inet) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register TEXT to INET cast function");
-		goto cleanup;
-	}
-
-	// Scalar functions
-	host_function = duckdb_create_scalar_function();
-	duckdb_scalar_function_set_name(host_function, "host");
-	duckdb_scalar_function_add_parameter(host_function, inet_type.c_type());
-	duckdb_scalar_function_set_return_type(host_function, text_type.c_type());
-	duckdb_scalar_function_set_function(host_function, host_function_impl);
-	success = duckdb_register_scalar_function(connection, host_function) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register host function");
-		goto cleanup;
-	}
-
-	family_function = duckdb_create_scalar_function();
-	duckdb_scalar_function_set_name(family_function, "family");
-	duckdb_scalar_function_add_parameter(family_function, inet_type.c_type());
-	duckdb_scalar_function_set_return_type(family_function, utinyint_type.c_type());
-	duckdb_scalar_function_set_function(family_function, family_function_impl);
-	success = duckdb_register_scalar_function(connection, family_function) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register family function");
-		goto cleanup;
-	}
-
-	netmask_function = duckdb_create_scalar_function();
-	duckdb_scalar_function_set_name(netmask_function, "netmask");
-	duckdb_scalar_function_add_parameter(netmask_function, inet_type.c_type());
-	duckdb_scalar_function_set_return_type(netmask_function, inet_type.c_type());
-	duckdb_scalar_function_set_function(netmask_function, netmask_function_impl);
-	success = duckdb_register_scalar_function(connection, netmask_function) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register net mask function");
-		goto cleanup;
-	}
-
-	network_function = duckdb_create_scalar_function();
-	duckdb_scalar_function_set_name(network_function, "network");
-	duckdb_scalar_function_add_parameter(network_function, inet_type.c_type());
-	duckdb_scalar_function_set_return_type(network_function, inet_type.c_type());
-	duckdb_scalar_function_set_function(network_function, network_function_impl);
-	success = duckdb_register_scalar_function(connection, network_function) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register network function");
-		goto cleanup;
-	}
-
-	broadcast_function = duckdb_create_scalar_function();
-	duckdb_scalar_function_set_name(broadcast_function, "broadcast");
-	duckdb_scalar_function_add_parameter(broadcast_function, inet_type.c_type());
-	duckdb_scalar_function_set_return_type(broadcast_function, inet_type.c_type());
-	duckdb_scalar_function_set_function(broadcast_function, broadcast_function_impl);
-	success = duckdb_register_scalar_function(connection, broadcast_function) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register broadcast function");
-		goto cleanup;
-	}
-
-	add_function = duckdb_create_scalar_function();
-	duckdb_scalar_function_set_name(add_function, "+");
-	duckdb_scalar_function_add_parameter(add_function, inet_type.c_type());
-	duckdb_scalar_function_add_parameter(add_function, hugeint_type.c_type());
-	duckdb_scalar_function_set_return_type(add_function, inet_type.c_type());
-	duckdb_scalar_function_set_function(add_function, add_function_impl);
-	success = duckdb_register_scalar_function(connection, add_function) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register + function");
-		goto cleanup;
-	}
-
-	sub_function = duckdb_create_scalar_function();
-	duckdb_scalar_function_set_name(sub_function, "-");
-	duckdb_scalar_function_add_parameter(sub_function, inet_type.c_type());
-	duckdb_scalar_function_add_parameter(sub_function, hugeint_type.c_type());
-	duckdb_scalar_function_set_return_type(sub_function, inet_type.c_type());
-	duckdb_scalar_function_set_function(sub_function, sub_function_impl);
-	success = duckdb_register_scalar_function(connection, sub_function) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register - function");
-		goto cleanup;
-	}
-
-	contains_left_function = duckdb_create_scalar_function();
-	duckdb_scalar_function_set_name(contains_left_function, "<<=");
-	duckdb_scalar_function_add_parameter(contains_left_function, inet_type.c_type());
-	duckdb_scalar_function_add_parameter(contains_left_function, inet_type.c_type());
-	duckdb_scalar_function_set_return_type(contains_left_function, bool_type.c_type());
-	duckdb_scalar_function_set_function(contains_left_function, contains_left_function_impl);
-	success = duckdb_register_scalar_function(connection, contains_left_function) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register <<= function");
-		goto cleanup;
-	}
-	duckdb_scalar_function_set_name(contains_left_function, "subnet_contained_by_or_equals");
-	success = duckdb_register_scalar_function(connection, contains_left_function) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register subnet_contained_by_or_equals function");
-		goto cleanup;
-	}
-
-	contains_right_function = duckdb_create_scalar_function();
-	duckdb_scalar_function_set_name(contains_right_function, ">>=");
-	duckdb_scalar_function_add_parameter(contains_right_function, inet_type.c_type());
-	duckdb_scalar_function_add_parameter(contains_right_function, inet_type.c_type());
-	duckdb_scalar_function_set_return_type(contains_right_function, bool_type.c_type());
-	duckdb_scalar_function_set_function(contains_right_function, contains_right_function_impl);
-	success = duckdb_register_scalar_function(connection, contains_right_function) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register >>= function");
-		goto cleanup;
-	}
-	duckdb_scalar_function_set_name(contains_right_function, "subnet_contains_or_equals");
-	success = duckdb_register_scalar_function(connection, contains_right_function) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register subnet_contains_or_equals function");
-		goto cleanup;
-	}
-
-	html_escape_function_set = duckdb_create_scalar_function_set("html_escape");
-	html_escape_function = duckdb_create_scalar_function();
-	duckdb_scalar_function_set_name(html_escape_function, "html_escape");
-	duckdb_scalar_function_set_return_type(html_escape_function, text_type.c_type());
-	duckdb_scalar_function_add_parameter(html_escape_function, text_type.c_type());
-	duckdb_scalar_function_set_function(html_escape_function, html_escape_function_impl);
-	duckdb_add_scalar_function_to_set(html_escape_function_set, html_escape_function);
-
-	html_escape_quote_function = duckdb_create_scalar_function();
-	duckdb_scalar_function_set_name(html_escape_quote_function, "html_escape");
-	duckdb_scalar_function_set_return_type(html_escape_quote_function, text_type.c_type());
-	duckdb_scalar_function_add_parameter(html_escape_quote_function, text_type.c_type());
-	duckdb_scalar_function_add_parameter(html_escape_quote_function, bool_type.c_type());
-	duckdb_scalar_function_set_function(html_escape_quote_function, html_escape_quoute_function_impl);
-	duckdb_add_scalar_function_to_set(html_escape_function_set, html_escape_quote_function);
-
-	success = duckdb_register_scalar_function_set(connection, html_escape_function_set) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register html_escape function");
-		goto cleanup;
-	}
-
-	html_unescape_function = duckdb_create_scalar_function();
-	duckdb_scalar_function_set_name(html_unescape_function, "html_unescape");
-	duckdb_scalar_function_set_return_type(html_unescape_function, text_type.c_type());
-	duckdb_scalar_function_add_parameter(html_unescape_function, text_type.c_type());
-	duckdb_scalar_function_set_function(html_unescape_function, html_unescape_function_impl);
-	success = duckdb_register_scalar_function(connection, html_unescape_function) == DuckDBSuccess;
-	if (!success) {
-		access->set_error(info, "Failed to register html_unescape function");
-		goto cleanup;
-	}
-
-cleanup: // Cleanup
-
-	duckdb_destroy_cast_function(&text_to_inet);
-	duckdb_destroy_cast_function(&inet_to_text);
-
-	duckdb_destroy_scalar_function(&host_function);
-	duckdb_destroy_scalar_function(&family_function);
-	duckdb_destroy_scalar_function(&netmask_function);
-	duckdb_destroy_scalar_function(&network_function);
-	duckdb_destroy_scalar_function(&broadcast_function);
-	duckdb_destroy_scalar_function(&add_function);
-	duckdb_destroy_scalar_function(&sub_function);
-	duckdb_destroy_scalar_function(&contains_left_function);
-	duckdb_destroy_scalar_function(&contains_right_function);
-
-	duckdb_destroy_scalar_function(&html_escape_function);
-	duckdb_destroy_scalar_function(&html_escape_quote_function);
-	duckdb_destroy_scalar_function_set(&html_escape_function_set);
-	duckdb_destroy_scalar_function(&html_unescape_function);
-
-	if (!success) {
-		return false;
-	}
-
-	return true;
+    INetLoader loader(con, info, access);
+    return loader.LoadExtension();
 }
