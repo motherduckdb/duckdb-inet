@@ -779,10 +779,10 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	bool success = true;
 
 	duckdb_logical_type inet_type = make_inet_type();
-	duckdb_logical_type text_type = duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
-	duckdb_logical_type bool_type = duckdb_create_logical_type(DUCKDB_TYPE_BOOLEAN);
-	duckdb_logical_type utinyint_type = duckdb_create_logical_type(DUCKDB_TYPE_UTINYINT);
-	duckdb_logical_type hugeint_type = duckdb_create_logical_type(DUCKDB_TYPE_HUGEINT);
+	auto text_type = LogicalType::VARCHAR();
+	auto bool_type = LogicalType::BOOLEAN();
+	auto utinyint_type = LogicalType::UTINYINT();
+	auto hugeint_type = LogicalType::HUGEINT();
 
 	// Register the type
 	success = duckdb_register_logical_type(connection, inet_type, NULL) == DuckDBSuccess;
@@ -795,7 +795,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	inet_to_text = duckdb_create_cast_function();
 	duckdb_cast_function_set_implicit_cast_cost(inet_to_text, -1);
 	duckdb_cast_function_set_source_type(inet_to_text, inet_type);
-	duckdb_cast_function_set_target_type(inet_to_text, text_type);
+	duckdb_cast_function_set_target_type(inet_to_text, text_type.c_type());
 	duckdb_cast_function_set_function(inet_to_text, inet_to_text_cast_impl);
 
 	success = duckdb_register_cast_function(connection, inet_to_text) == DuckDBSuccess;
@@ -806,7 +806,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 
 	text_to_inet = duckdb_create_cast_function();
 	duckdb_cast_function_set_implicit_cast_cost(text_to_inet, -1);
-	duckdb_cast_function_set_source_type(text_to_inet, text_type);
+	duckdb_cast_function_set_source_type(text_to_inet, text_type.c_type());
 	duckdb_cast_function_set_target_type(text_to_inet, inet_type);
 	duckdb_cast_function_set_function(text_to_inet, text_to_inet_cast_impl);
 
@@ -820,7 +820,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	host_function = duckdb_create_scalar_function();
 	duckdb_scalar_function_set_name(host_function, "host");
 	duckdb_scalar_function_add_parameter(host_function, inet_type);
-	duckdb_scalar_function_set_return_type(host_function, text_type);
+	duckdb_scalar_function_set_return_type(host_function, text_type.c_type());
 	duckdb_scalar_function_set_function(host_function, host_function_impl);
 	success = duckdb_register_scalar_function(connection, host_function) == DuckDBSuccess;
 	if (!success) {
@@ -831,7 +831,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	family_function = duckdb_create_scalar_function();
 	duckdb_scalar_function_set_name(family_function, "family");
 	duckdb_scalar_function_add_parameter(family_function, inet_type);
-	duckdb_scalar_function_set_return_type(family_function, utinyint_type);
+	duckdb_scalar_function_set_return_type(family_function, utinyint_type.c_type());
 	duckdb_scalar_function_set_function(family_function, family_function_impl);
 	success = duckdb_register_scalar_function(connection, family_function) == DuckDBSuccess;
 	if (!success) {
@@ -875,7 +875,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	add_function = duckdb_create_scalar_function();
 	duckdb_scalar_function_set_name(add_function, "+");
 	duckdb_scalar_function_add_parameter(add_function, inet_type);
-	duckdb_scalar_function_add_parameter(add_function, hugeint_type);
+	duckdb_scalar_function_add_parameter(add_function, hugeint_type.c_type());
 	duckdb_scalar_function_set_return_type(add_function, inet_type);
 	duckdb_scalar_function_set_function(add_function, add_function_impl);
 	success = duckdb_register_scalar_function(connection, add_function) == DuckDBSuccess;
@@ -887,7 +887,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	sub_function = duckdb_create_scalar_function();
 	duckdb_scalar_function_set_name(sub_function, "-");
 	duckdb_scalar_function_add_parameter(sub_function, inet_type);
-	duckdb_scalar_function_add_parameter(sub_function, hugeint_type);
+	duckdb_scalar_function_add_parameter(sub_function, hugeint_type.c_type());
 	duckdb_scalar_function_set_return_type(sub_function, inet_type);
 	duckdb_scalar_function_set_function(sub_function, sub_function_impl);
 	success = duckdb_register_scalar_function(connection, sub_function) == DuckDBSuccess;
@@ -900,7 +900,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	duckdb_scalar_function_set_name(contains_left_function, "<<=");
 	duckdb_scalar_function_add_parameter(contains_left_function, inet_type);
 	duckdb_scalar_function_add_parameter(contains_left_function, inet_type);
-	duckdb_scalar_function_set_return_type(contains_left_function, bool_type);
+	duckdb_scalar_function_set_return_type(contains_left_function, bool_type.c_type());
 	duckdb_scalar_function_set_function(contains_left_function, contains_left_function_impl);
 	success = duckdb_register_scalar_function(connection, contains_left_function) == DuckDBSuccess;
 	if (!success) {
@@ -918,7 +918,7 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	duckdb_scalar_function_set_name(contains_right_function, ">>=");
 	duckdb_scalar_function_add_parameter(contains_right_function, inet_type);
 	duckdb_scalar_function_add_parameter(contains_right_function, inet_type);
-	duckdb_scalar_function_set_return_type(contains_right_function, bool_type);
+	duckdb_scalar_function_set_return_type(contains_right_function, bool_type.c_type());
 	duckdb_scalar_function_set_function(contains_right_function, contains_right_function_impl);
 	success = duckdb_register_scalar_function(connection, contains_right_function) == DuckDBSuccess;
 	if (!success) {
@@ -935,16 +935,16 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 	html_escape_function_set = duckdb_create_scalar_function_set("html_escape");
 	html_escape_function = duckdb_create_scalar_function();
 	duckdb_scalar_function_set_name(html_escape_function, "html_escape");
-	duckdb_scalar_function_set_return_type(html_escape_function, text_type);
-	duckdb_scalar_function_add_parameter(html_escape_function, text_type);
+	duckdb_scalar_function_set_return_type(html_escape_function, text_type.c_type());
+	duckdb_scalar_function_add_parameter(html_escape_function, text_type.c_type());
 	duckdb_scalar_function_set_function(html_escape_function, html_escape_function_impl);
 	duckdb_add_scalar_function_to_set(html_escape_function_set, html_escape_function);
 
 	html_escape_quote_function = duckdb_create_scalar_function();
 	duckdb_scalar_function_set_name(html_escape_quote_function, "html_escape");
-	duckdb_scalar_function_set_return_type(html_escape_quote_function, text_type);
-	duckdb_scalar_function_add_parameter(html_escape_quote_function, text_type);
-	duckdb_scalar_function_add_parameter(html_escape_quote_function, bool_type);
+	duckdb_scalar_function_set_return_type(html_escape_quote_function, text_type.c_type());
+	duckdb_scalar_function_add_parameter(html_escape_quote_function, text_type.c_type());
+	duckdb_scalar_function_add_parameter(html_escape_quote_function, bool_type.c_type());
 	duckdb_scalar_function_set_function(html_escape_quote_function, html_escape_quoute_function_impl);
 	duckdb_add_scalar_function_to_set(html_escape_function_set, html_escape_quote_function);
 
@@ -956,8 +956,8 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 
 	html_unescape_function = duckdb_create_scalar_function();
 	duckdb_scalar_function_set_name(html_unescape_function, "html_unescape");
-	duckdb_scalar_function_set_return_type(html_unescape_function, text_type);
-	duckdb_scalar_function_add_parameter(html_unescape_function, text_type);
+	duckdb_scalar_function_set_return_type(html_unescape_function, text_type.c_type());
+	duckdb_scalar_function_add_parameter(html_unescape_function, text_type.c_type());
 	duckdb_scalar_function_set_function(html_unescape_function, html_unescape_function_impl);
 	success = duckdb_register_scalar_function(connection, html_unescape_function) == DuckDBSuccess;
 	if (!success) {
@@ -968,10 +968,6 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info 
 cleanup: // Cleanup
 
 	duckdb_destroy_logical_type(&inet_type);
-	duckdb_destroy_logical_type(&text_type);
-	duckdb_destroy_logical_type(&bool_type);
-	duckdb_destroy_logical_type(&utinyint_type);
-	duckdb_destroy_logical_type(&hugeint_type);
 
 	duckdb_destroy_cast_function(&text_to_inet);
 	duckdb_destroy_cast_function(&inet_to_text);
