@@ -12,6 +12,8 @@ DUCKDB_EXTENSION_EXTERN
 
 #include "duckdb/stable/extension_loader.hpp"
 #include "duckdb/stable/logical_type.hpp"
+#include "duckdb/stable/cast_function.hpp"
+#include "duckdb/stable/scalar_function.hpp"
 
 using namespace duckdb_stable;
 
@@ -756,6 +758,62 @@ static void html_unescape_function_impl(duckdb_function_info info, duckdb_data_c
 	}
 }
 
+class INetToVarcharCast : public CastFunction {
+public:
+	LogicalType SourceType() override {
+		return make_inet_type();
+	}
+
+	LogicalType TargetType() override {
+		return LogicalType::VARCHAR();
+	}
+
+	int64_t ImplicitCastCost() override {
+		return -1;
+	}
+
+	duckdb_cast_function_t GetFunction() override {
+		return inet_to_text_cast_impl;
+	}
+};
+
+class VarcharToINetCast : public CastFunction {
+public:
+	LogicalType SourceType() override {
+		return LogicalType::VARCHAR();
+	}
+
+	LogicalType TargetType() override {
+		return make_inet_type();
+	}
+
+	int64_t ImplicitCastCost() override {
+		return -1;
+	}
+
+	duckdb_cast_function_t GetFunction() override {
+		return text_to_inet_cast_impl;
+	}
+};
+
+class HostFunction : public ScalarFunction {
+public:
+	const char *Name() const override {
+		return "host";
+	}
+	LogicalType ReturnType() const override {
+		return LogicalType::VARCHAR();
+	}
+	std::vector<LogicalType> Arguments() const override {
+		std::vector<LogicalType> result;
+		result.push_back(make_inet_type());
+		return result;
+	}
+	duckdb_scalar_function_t GetFunction() const override {
+		return host_function_impl;
+	}
+};
+
 class INetLoader : public ExtensionLoader {
 public:
 	INetLoader(duckdb_connection con, duckdb_extension_info info,
@@ -765,9 +823,6 @@ public:
 
 protected:
 	void Load() override {
-		duckdb_cast_function inet_to_text = nullptr;
-		duckdb_cast_function text_to_inet = nullptr;
-		duckdb_scalar_function host_function = nullptr;
 		duckdb_scalar_function family_function = nullptr;
 		duckdb_scalar_function netmask_function = nullptr;
 		duckdb_scalar_function network_function = nullptr;
@@ -788,45 +843,17 @@ protected:
 		auto utinyint_type = LogicalType::UTINYINT();
 		auto hugeint_type = LogicalType::HUGEINT();
 
-		// Register the type
-		success = duckdb_register_logical_type(connection, inet_type.c_type(), NULL) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register INET type");
-		}
+		Register(inet_type);
 
 		// Register cast functions
-		inet_to_text = duckdb_create_cast_function();
-		duckdb_cast_function_set_implicit_cast_cost(inet_to_text, -1);
-		duckdb_cast_function_set_source_type(inet_to_text, inet_type.c_type());
-		duckdb_cast_function_set_target_type(inet_to_text, text_type.c_type());
-		duckdb_cast_function_set_function(inet_to_text, inet_to_text_cast_impl);
+		INetToVarcharCast inet_to_text;
+		Register(inet_to_text);
 
-		success = duckdb_register_cast_function(connection, inet_to_text) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register INET to TEXT cast function");
-		}
+		VarcharToINetCast text_to_inet;
+		Register(text_to_inet);
 
-		text_to_inet = duckdb_create_cast_function();
-		duckdb_cast_function_set_implicit_cast_cost(text_to_inet, -1);
-		duckdb_cast_function_set_source_type(text_to_inet, text_type.c_type());
-		duckdb_cast_function_set_target_type(text_to_inet, inet_type.c_type());
-		duckdb_cast_function_set_function(text_to_inet, text_to_inet_cast_impl);
-
-		success = duckdb_register_cast_function(connection, text_to_inet) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register TEXT to INET cast function");
-		}
-
-		// Scalar functions
-		host_function = duckdb_create_scalar_function();
-		duckdb_scalar_function_set_name(host_function, "host");
-		duckdb_scalar_function_add_parameter(host_function, inet_type.c_type());
-		duckdb_scalar_function_set_return_type(host_function, text_type.c_type());
-		duckdb_scalar_function_set_function(host_function, host_function_impl);
-		success = duckdb_register_scalar_function(connection, host_function) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register host function");
-		}
+		HostFunction host_function;
+		Register(host_function);
 
 		family_function = duckdb_create_scalar_function();
 		duckdb_scalar_function_set_name(family_function, "family");
@@ -953,10 +980,6 @@ protected:
 			throw std::runtime_error("Failed to register html_unescape function");
 		}
 
-		duckdb_destroy_cast_function(&text_to_inet);
-		duckdb_destroy_cast_function(&inet_to_text);
-
-		duckdb_destroy_scalar_function(&host_function);
 		duckdb_destroy_scalar_function(&family_function);
 		duckdb_destroy_scalar_function(&netmask_function);
 		duckdb_destroy_scalar_function(&network_function);
