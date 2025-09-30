@@ -1,4 +1,4 @@
-#include "inet_ipaddress.h"
+#include "inet_ipaddress.hpp"
 
 #include <string.h>
 #include <stdio.h>
@@ -105,7 +105,7 @@ static size_t quibble_half_address_bit_shift(size_t quibble, int *is_upper) {
 	return quibble_shift * IPV6_QUIBBLE_BITS;
 }
 
-static bool try_parse_ipv4(const char *data, size_t size, INET_IPAddress *result, char **error_message) {
+static bool try_parse_ipv4(const char *data, size_t size, INET_IPAddress *result, const char **error_message) {
 	size_t c = 0;
 	size_t number_count = 0;
 	uint32_t address = 0;
@@ -187,7 +187,7 @@ parse_mask:
 	return true;
 }
 
-static int try_parse_ipv6(const char *data, size_t size, INET_IPAddress *result, char **error_message) {
+static int try_parse_ipv6(const char *data, size_t size, INET_IPAddress *result, const char **error_message) {
 	size_t c = 0;
 	int parsed_quibble_count = 0;
 	uint16_t quibbles[INET_IPV6_NUM_QUIBBLE] = {};
@@ -351,7 +351,7 @@ INET_IPAddress ipaddress_from_ipv6(duckdb_uhugeint address, uint16_t mask) {
 	return result;
 }
 
-bool ipaddress_try_parse(const char *data, size_t size, INET_IPAddress *result, char **error_message) {
+bool ipaddress_try_parse(const char *data, size_t size, INET_IPAddress *result, const char **error_message) {
 	size_t c = 0;
 
 	// Detect IPv4 vs IPv6
@@ -388,7 +388,7 @@ bool ipaddress_try_parse(const char *data, size_t size, INET_IPAddress *result, 
 	return false;
 }
 
-INET_IPAddress ipaddress_from_string(const char *buffer, size_t buffer_size, char **error_message) {
+INET_IPAddress ipaddress_from_string(const char *buffer, size_t buffer_size, const char **error_message) {
 	INET_IPAddress result;
 	if (!ipaddress_try_parse(buffer, buffer_size, &result, error_message)) {
 		result.type = INET_IP_ADDRESS_INVALID;

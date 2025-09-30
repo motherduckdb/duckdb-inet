@@ -1,5 +1,5 @@
-#include "inet_html.h"
-#include "inet_html_table.h"
+#include "inet_html.hpp"
+#include "inet_html_table.hpp"
 
 #include <ctype.h>
 #include <stdbool.h>
