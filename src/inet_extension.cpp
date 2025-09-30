@@ -924,6 +924,116 @@ public:
 	}
 };
 
+class ContainsLeftBaseFunction : public ScalarFunction {
+public:
+	LogicalType ReturnType() const override {
+		return LogicalType::BOOLEAN();
+	}
+	std::vector<LogicalType> Arguments() const override {
+		std::vector<LogicalType> result;
+		result.push_back(make_inet_type());
+		result.push_back(make_inet_type());
+		return result;
+	}
+	duckdb_scalar_function_t GetFunction() const override {
+		return contains_left_function_impl;
+	}
+};
+
+class ContainsLeftFunction : public ContainsLeftBaseFunction {
+public:
+	const char *Name() const override {
+		return "<<=";
+	}
+};
+
+class SubnetContainedByOrEquals : public ContainsLeftBaseFunction {
+public:
+	const char *Name() const override {
+		return "subnet_contained_by_or_equals";
+	}
+};
+
+class ContainsRightBaseFunction : public ScalarFunction {
+public:
+	LogicalType ReturnType() const override {
+		return LogicalType::BOOLEAN();
+	}
+	std::vector<LogicalType> Arguments() const override {
+		std::vector<LogicalType> result;
+		result.push_back(make_inet_type());
+		result.push_back(make_inet_type());
+		return result;
+	}
+	duckdb_scalar_function_t GetFunction() const override {
+		return contains_right_function_impl;
+	}
+};
+
+class ContainsRightFunction : public ContainsRightBaseFunction {
+public:
+	const char *Name() const override {
+		return ">>=";
+	}
+};
+
+class SubnetContainsOrEqualsFunction : public ContainsRightBaseFunction {
+public:
+	const char *Name() const override {
+		return "subnet_contains_or_equals";
+	}
+};
+
+class HTMLEscapeFunction : public ScalarFunction {
+public:
+	LogicalType ReturnType() const override {
+		return LogicalType::VARCHAR();
+	}
+	std::vector<LogicalType> Arguments() const override {
+		std::vector<LogicalType> result;
+		result.push_back(LogicalType::VARCHAR());
+		return result;
+	}
+	duckdb_scalar_function_t GetFunction() const override {
+		return html_escape_function_impl;
+	}
+};
+
+class HTMLEscapeQuoteFunction : public ScalarFunction {
+public:
+	LogicalType ReturnType() const override {
+		return LogicalType::VARCHAR();
+	}
+	std::vector<LogicalType> Arguments() const override {
+		std::vector<LogicalType> result;
+		result.push_back(LogicalType::VARCHAR());
+		result.push_back(LogicalType::BOOLEAN());
+		return result;
+	}
+	duckdb_scalar_function_t GetFunction() const override {
+		return html_escape_quoute_function_impl;
+	}
+};
+
+class HTMLUnescapeFunction : public ScalarFunction {
+public:
+	const char *Name() const override {
+		return "html_unescape";
+	}
+
+	LogicalType ReturnType() const override {
+		return LogicalType::VARCHAR();
+	}
+	std::vector<LogicalType> Arguments() const override {
+		std::vector<LogicalType> result;
+		result.push_back(LogicalType::VARCHAR());
+		return result;
+	}
+	duckdb_scalar_function_t GetFunction() const override {
+		return html_unescape_function_impl;
+	}
+};
+
 class INetLoader : public ExtensionLoader {
 public:
 	INetLoader(duckdb_connection con, duckdb_extension_info info,
@@ -933,14 +1043,6 @@ public:
 
 protected:
 	void Load() override {
-		duckdb_scalar_function contains_left_function = nullptr;
-		duckdb_scalar_function contains_right_function = nullptr;
-		duckdb_scalar_function_set html_escape_function_set = nullptr;
-		duckdb_scalar_function html_escape_function = nullptr;
-		duckdb_scalar_function html_escape_quote_function = nullptr;
-		duckdb_scalar_function html_unescape_function = nullptr;
-		bool success = true;
-
 		auto inet_type = make_inet_type();
 		auto text_type = LogicalType::VARCHAR();
 		auto bool_type = LogicalType::BOOLEAN();
@@ -978,76 +1080,27 @@ protected:
 		SubtractFunction subtract_function;
 		Register(subtract_function);
 
-		contains_left_function = duckdb_create_scalar_function();
-		duckdb_scalar_function_set_name(contains_left_function, "<<=");
-		duckdb_scalar_function_add_parameter(contains_left_function, inet_type.c_type());
-		duckdb_scalar_function_add_parameter(contains_left_function, inet_type.c_type());
-		duckdb_scalar_function_set_return_type(contains_left_function, bool_type.c_type());
-		duckdb_scalar_function_set_function(contains_left_function, contains_left_function_impl);
-		success = duckdb_register_scalar_function(connection, contains_left_function) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register <<= function");
-		}
-		duckdb_scalar_function_set_name(contains_left_function, "subnet_contained_by_or_equals");
-		success = duckdb_register_scalar_function(connection, contains_left_function) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register subnet_contained_by_or_equals function");
-		}
+		ContainsLeftFunction contains_left;
+		Register(contains_left);
 
-		contains_right_function = duckdb_create_scalar_function();
-		duckdb_scalar_function_set_name(contains_right_function, ">>=");
-		duckdb_scalar_function_add_parameter(contains_right_function, inet_type.c_type());
-		duckdb_scalar_function_add_parameter(contains_right_function, inet_type.c_type());
-		duckdb_scalar_function_set_return_type(contains_right_function, bool_type.c_type());
-		duckdb_scalar_function_set_function(contains_right_function, contains_right_function_impl);
-		success = duckdb_register_scalar_function(connection, contains_right_function) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register >>= function");
-		}
-		duckdb_scalar_function_set_name(contains_right_function, "subnet_contains_or_equals");
-		success = duckdb_register_scalar_function(connection, contains_right_function) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register subnet_contains_or_equals function");
-		}
+		SubnetContainedByOrEquals subnet_contained_by_or_equals;
+		Register(subnet_contained_by_or_equals);
 
-		html_escape_function_set = duckdb_create_scalar_function_set("html_escape");
-		html_escape_function = duckdb_create_scalar_function();
-		duckdb_scalar_function_set_name(html_escape_function, "html_escape");
-		duckdb_scalar_function_set_return_type(html_escape_function, text_type.c_type());
-		duckdb_scalar_function_add_parameter(html_escape_function, text_type.c_type());
-		duckdb_scalar_function_set_function(html_escape_function, html_escape_function_impl);
-		duckdb_add_scalar_function_to_set(html_escape_function_set, html_escape_function);
+		ContainsRightFunction contains_right;
+		Register(contains_right);
 
-		html_escape_quote_function = duckdb_create_scalar_function();
-		duckdb_scalar_function_set_name(html_escape_quote_function, "html_escape");
-		duckdb_scalar_function_set_return_type(html_escape_quote_function, text_type.c_type());
-		duckdb_scalar_function_add_parameter(html_escape_quote_function, text_type.c_type());
-		duckdb_scalar_function_add_parameter(html_escape_quote_function, bool_type.c_type());
-		duckdb_scalar_function_set_function(html_escape_quote_function, html_escape_quoute_function_impl);
-		duckdb_add_scalar_function_to_set(html_escape_function_set, html_escape_quote_function);
+		SubnetContainsOrEqualsFunction subnet_contains_or_equals;
+		Register(subnet_contains_or_equals);
 
-		success = duckdb_register_scalar_function_set(connection, html_escape_function_set) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register html_escape function");
-		}
+		ScalarFunctionSet html_escape_set("html_escape");
+		HTMLEscapeFunction html_escape;
+		HTMLEscapeQuoteFunction html_quote_escape;
+		html_escape_set.AddFunction(html_escape);
+		html_escape_set.AddFunction(html_quote_escape);
+		Register(html_escape_set);
 
-		html_unescape_function = duckdb_create_scalar_function();
-		duckdb_scalar_function_set_name(html_unescape_function, "html_unescape");
-		duckdb_scalar_function_set_return_type(html_unescape_function, text_type.c_type());
-		duckdb_scalar_function_add_parameter(html_unescape_function, text_type.c_type());
-		duckdb_scalar_function_set_function(html_unescape_function, html_unescape_function_impl);
-		success = duckdb_register_scalar_function(connection, html_unescape_function) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register html_unescape function");
-		}
-
-		duckdb_destroy_scalar_function(&contains_left_function);
-		duckdb_destroy_scalar_function(&contains_right_function);
-
-		duckdb_destroy_scalar_function(&html_escape_function);
-		duckdb_destroy_scalar_function(&html_escape_quote_function);
-		duckdb_destroy_scalar_function_set(&html_escape_function_set);
-		duckdb_destroy_scalar_function(&html_unescape_function);
+		HTMLUnescapeFunction html_unescape;
+		Register(html_unescape);
 	}
 };
 
