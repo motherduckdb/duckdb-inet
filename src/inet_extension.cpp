@@ -814,6 +814,116 @@ public:
 	}
 };
 
+class FamilyFunction : public ScalarFunction {
+public:
+	const char *Name() const override {
+		return "family";
+	}
+	LogicalType ReturnType() const override {
+		return LogicalType::UTINYINT();
+	}
+	std::vector<LogicalType> Arguments() const override {
+		std::vector<LogicalType> result;
+		result.push_back(make_inet_type());
+		return result;
+	}
+	duckdb_scalar_function_t GetFunction() const override {
+		return family_function_impl;
+	}
+};
+
+class NetmaskFunction : public ScalarFunction {
+public:
+	const char *Name() const override {
+		return "netmask";
+	}
+	LogicalType ReturnType() const override {
+		return make_inet_type();
+	}
+	std::vector<LogicalType> Arguments() const override {
+		std::vector<LogicalType> result;
+		result.push_back(make_inet_type());
+		return result;
+	}
+	duckdb_scalar_function_t GetFunction() const override {
+		return netmask_function_impl;
+	}
+};
+
+class NetworkFunction : public ScalarFunction {
+public:
+	const char *Name() const override {
+		return "network";
+	}
+	LogicalType ReturnType() const override {
+		return make_inet_type();
+	}
+	std::vector<LogicalType> Arguments() const override {
+		std::vector<LogicalType> result;
+		result.push_back(make_inet_type());
+		return result;
+	}
+	duckdb_scalar_function_t GetFunction() const override {
+		return network_function_impl;
+	}
+};
+
+class BroadcastFunction : public ScalarFunction {
+public:
+	const char *Name() const override {
+		return "broadcast";
+	}
+	LogicalType ReturnType() const override {
+		return make_inet_type();
+	}
+	std::vector<LogicalType> Arguments() const override {
+		std::vector<LogicalType> result;
+		result.push_back(make_inet_type());
+		return result;
+	}
+	duckdb_scalar_function_t GetFunction() const override {
+		return broadcast_function_impl;
+	}
+};
+
+class AddFunction : public ScalarFunction {
+public:
+	const char *Name() const override {
+		return "+";
+	}
+	LogicalType ReturnType() const override {
+		return make_inet_type();
+	}
+	std::vector<LogicalType> Arguments() const override {
+		std::vector<LogicalType> result;
+		result.push_back(make_inet_type());
+		result.push_back(LogicalType::HUGEINT());
+		return result;
+	}
+	duckdb_scalar_function_t GetFunction() const override {
+		return add_function_impl;
+	}
+};
+
+class SubtractFunction : public ScalarFunction {
+public:
+	const char *Name() const override {
+		return "-";
+	}
+	LogicalType ReturnType() const override {
+		return make_inet_type();
+	}
+	std::vector<LogicalType> Arguments() const override {
+		std::vector<LogicalType> result;
+		result.push_back(make_inet_type());
+		result.push_back(LogicalType::HUGEINT());
+		return result;
+	}
+	duckdb_scalar_function_t GetFunction() const override {
+		return sub_function_impl;
+	}
+};
+
 class INetLoader : public ExtensionLoader {
 public:
 	INetLoader(duckdb_connection con, duckdb_extension_info info,
@@ -823,12 +933,6 @@ public:
 
 protected:
 	void Load() override {
-		duckdb_scalar_function family_function = nullptr;
-		duckdb_scalar_function netmask_function = nullptr;
-		duckdb_scalar_function network_function = nullptr;
-		duckdb_scalar_function broadcast_function = nullptr;
-		duckdb_scalar_function add_function = nullptr;
-		duckdb_scalar_function sub_function = nullptr;
 		duckdb_scalar_function contains_left_function = nullptr;
 		duckdb_scalar_function contains_right_function = nullptr;
 		duckdb_scalar_function_set html_escape_function_set = nullptr;
@@ -852,70 +956,27 @@ protected:
 		VarcharToINetCast text_to_inet;
 		Register(text_to_inet);
 
+		// scalar functions
 		HostFunction host_function;
 		Register(host_function);
 
-		family_function = duckdb_create_scalar_function();
-		duckdb_scalar_function_set_name(family_function, "family");
-		duckdb_scalar_function_add_parameter(family_function, inet_type.c_type());
-		duckdb_scalar_function_set_return_type(family_function, utinyint_type.c_type());
-		duckdb_scalar_function_set_function(family_function, family_function_impl);
-		success = duckdb_register_scalar_function(connection, family_function) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register family function");
-		}
+		FamilyFunction family_function;
+		Register(family_function);
 
-		netmask_function = duckdb_create_scalar_function();
-		duckdb_scalar_function_set_name(netmask_function, "netmask");
-		duckdb_scalar_function_add_parameter(netmask_function, inet_type.c_type());
-		duckdb_scalar_function_set_return_type(netmask_function, inet_type.c_type());
-		duckdb_scalar_function_set_function(netmask_function, netmask_function_impl);
-		success = duckdb_register_scalar_function(connection, netmask_function) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register net mask function");
-		}
+		NetmaskFunction netmask_function;
+		Register(netmask_function);
 
-		network_function = duckdb_create_scalar_function();
-		duckdb_scalar_function_set_name(network_function, "network");
-		duckdb_scalar_function_add_parameter(network_function, inet_type.c_type());
-		duckdb_scalar_function_set_return_type(network_function, inet_type.c_type());
-		duckdb_scalar_function_set_function(network_function, network_function_impl);
-		success = duckdb_register_scalar_function(connection, network_function) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register network function");
-		}
+		NetworkFunction network_function;
+		Register(network_function);
 
-		broadcast_function = duckdb_create_scalar_function();
-		duckdb_scalar_function_set_name(broadcast_function, "broadcast");
-		duckdb_scalar_function_add_parameter(broadcast_function, inet_type.c_type());
-		duckdb_scalar_function_set_return_type(broadcast_function, inet_type.c_type());
-		duckdb_scalar_function_set_function(broadcast_function, broadcast_function_impl);
-		success = duckdb_register_scalar_function(connection, broadcast_function) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register broadcast function");
-		}
+		BroadcastFunction broadcast_function;
+		Register(broadcast_function);
 
-		add_function = duckdb_create_scalar_function();
-		duckdb_scalar_function_set_name(add_function, "+");
-		duckdb_scalar_function_add_parameter(add_function, inet_type.c_type());
-		duckdb_scalar_function_add_parameter(add_function, hugeint_type.c_type());
-		duckdb_scalar_function_set_return_type(add_function, inet_type.c_type());
-		duckdb_scalar_function_set_function(add_function, add_function_impl);
-		success = duckdb_register_scalar_function(connection, add_function) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register + function");
-		}
+		AddFunction add_function;
+		Register(add_function);
 
-		sub_function = duckdb_create_scalar_function();
-		duckdb_scalar_function_set_name(sub_function, "-");
-		duckdb_scalar_function_add_parameter(sub_function, inet_type.c_type());
-		duckdb_scalar_function_add_parameter(sub_function, hugeint_type.c_type());
-		duckdb_scalar_function_set_return_type(sub_function, inet_type.c_type());
-		duckdb_scalar_function_set_function(sub_function, sub_function_impl);
-		success = duckdb_register_scalar_function(connection, sub_function) == DuckDBSuccess;
-		if (!success) {
-			throw std::runtime_error("Failed to register - function");
-		}
+		SubtractFunction subtract_function;
+		Register(subtract_function);
 
 		contains_left_function = duckdb_create_scalar_function();
 		duckdb_scalar_function_set_name(contains_left_function, "<<=");
@@ -980,12 +1041,6 @@ protected:
 			throw std::runtime_error("Failed to register html_unescape function");
 		}
 
-		duckdb_destroy_scalar_function(&family_function);
-		duckdb_destroy_scalar_function(&netmask_function);
-		duckdb_destroy_scalar_function(&network_function);
-		duckdb_destroy_scalar_function(&broadcast_function);
-		duckdb_destroy_scalar_function(&add_function);
-		duckdb_destroy_scalar_function(&sub_function);
 		duckdb_destroy_scalar_function(&contains_left_function);
 		duckdb_destroy_scalar_function(&contains_right_function);
 
