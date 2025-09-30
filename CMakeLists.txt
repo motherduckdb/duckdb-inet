@@ -21,28 +21,18 @@ endif()
 
 add_definitions(-DDUCKDB_EXTENSION_NAME=${EXTENSION_NAME})
 
-if (DEFINED DUCKDB_EXTENSION_API_VERSION_UNSTABLE)
-    add_definitions(-DDUCKDB_EXTENSION_API_VERSION_UNSTABLE=${DUCKDB_EXTENSION_API_VERSION_UNSTABLE})
-endif()
-
 ###
 # Build
 ###
-project(${EXTENSION_NAME} LANGUAGES C)
-
 # Create Extension library
 set(EXTENSION_SOURCES
-        src/inet_extension.c
-        src/inet_html.c
-        src/inet_html_table.c
-        src/inet_ipaddress.c
+        src/inet_extension.cpp
+        src/inet_html.cpp
+        src/inet_html_table.cpp
+        src/inet_ipaddress.cpp
 )
 
-if (DUCKDB_WASM_EXTENSION)
-    add_library(${EXTENSION_NAME} STATIC ${EXTENSION_SOURCES})
-else()
-    add_library(${EXTENSION_NAME} SHARED ${EXTENSION_SOURCES})
-endif()
+build_loadable_extension_capi_unstable(${EXTENSION_NAME} ${EXTENSION_SOURCES})
 
 # Hide symbols
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
@@ -50,9 +40,3 @@ set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(VISIBILITY_INLINES_HIDDEN ON)
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -s")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -s")
-
-# Include own headers
-target_include_directories(${EXTENSION_NAME} PRIVATE src)
-
-# Include DuckDB C API headers
-target_include_directories(${EXTENSION_NAME} PRIVATE duckdb_capi)
