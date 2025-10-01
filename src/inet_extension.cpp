@@ -121,60 +121,21 @@ static bool inet_to_text_cast_impl(duckdb_function_info info, idx_t count, duckd
 	using INET_TYPE = StructTypeTernary<PrimitiveType<uint8_t>, PrimitiveType<duckdb_hugeint>, PrimitiveType<uint16_t>>;
 	using STRING_TYPE = PrimitiveType<string_t>;
 
+	char buffer[256];
 	Vector input_vec(input);
 	Vector output_vec(output);
 	executor.ExecuteUnary<INET_TYPE, STRING_TYPE>(input_vec, output_vec, count, [&](const INET_TYPE::ARG_TYPE &input) {
+		INET_IPAddress inet;
+		inet.type = (INET_IPAddressType)input.a_val;
+		inet.address = from_compatible_address(input.b_val, inet.type);
+		inet.mask = input.c_val;
+
+		size_t written = ipaddress_to_string(&inet, buffer, sizeof(buffer));
 		ResultValue<string_t> result;
-		result.is_null = true;
+		result.val = string_t(buffer, written);
 		return result;
 	});
 	return executor.Success();
-//
-//	duckdb_vector type_vec = duckdb_struct_vector_get_child(input, 0);
-//	duckdb_vector addr_vec = duckdb_struct_vector_get_child(input, 1);
-//	duckdb_vector mask_vec = duckdb_struct_vector_get_child(input, 2);
-//
-//	const uint8_t *type_data = (uint8_t *)duckdb_vector_get_data(type_vec);
-//	const duckdb_hugeint *addr_data = (duckdb_hugeint *)duckdb_vector_get_data(addr_vec);
-//	const uint16_t *mask_data = (uint16_t *)duckdb_vector_get_data(mask_vec);
-//
-//	uint64_t *source_validity = duckdb_vector_get_validity(input);
-//	if (source_validity) {
-//		// We might have NULL values, ensure the validity mask is writable
-//		duckdb_vector_ensure_validity_writable(output);
-//	}
-//	uint64_t *target_validity = duckdb_vector_get_validity(output);
-//
-//	INET_IPAddress inet;
-//	char buffer[256];
-//
-//	for (idx_t i = 0; i < count; i++) {
-//
-//		if (source_validity && !duckdb_validity_row_is_valid(source_validity, i)) {
-//			duckdb_validity_set_row_invalid(target_validity, i);
-//			continue;
-//		}
-//
-//		inet.type = (INET_IPAddressType)type_data[i];
-//		inet.address = from_compatible_address(addr_data[i], inet.type);
-//		inet.mask = mask_data[i];
-//
-//		size_t written = ipaddress_to_string(&inet, buffer, sizeof(buffer));
-//
-//		if (written == 0) {
-//			duckdb_cast_function_set_row_error(info, "Could not write inet string", i, output);
-//			return false;
-//		}
-//		if (written >= sizeof(buffer)) {
-//			duckdb_cast_function_set_row_error(info, "IP address string too long", i, output);
-//			return false;
-//		}
-//
-//		// Assign the string to the output vector
-//		duckdb_vector_assign_string_element_len(output, i, buffer, written);
-//	}
-//
-//	return true;
 }
 
 static bool text_to_inet_cast_impl(duckdb_function_info info, idx_t count, duckdb_vector input, duckdb_vector output) {
