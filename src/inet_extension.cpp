@@ -73,6 +73,7 @@ static duckdb_hugeint hugeint_negate(const duckdb_hugeint *input) {
 //----------------------------------------------------------------------------------------------------------------------
 // INET TYPE DEFINITION
 //----------------------------------------------------------------------------------------------------------------------
+using INET_EXECUTOR_TYPE = StructTypeTernary<PrimitiveType<uint8_t>, PrimitiveType<duckdb_hugeint>, PrimitiveType<uint16_t>>;
 
 static LogicalType make_inet_type() {
 	const char *child_names[] = {"ip_type", "address", "mask"};
@@ -113,74 +114,6 @@ static duckdb_hugeint to_compatible_address(duckdb_uhugeint new_addr, INET_IPAdd
 	duckdb_hugeint retval;
 	memcpy(&retval, &new_addr, sizeof(duckdb_hugeint));
 	return retval;
-}
-
-static bool text_to_inet_cast_impl(duckdb_function_info info, idx_t count, duckdb_vector input, duckdb_vector output) {
-
-	duckdb_vector type_vec = duckdb_struct_vector_get_child(output, 0);
-	duckdb_vector addr_vec = duckdb_struct_vector_get_child(output, 1);
-	duckdb_vector mask_vec = duckdb_struct_vector_get_child(output, 2);
-
-	uint8_t *type_data = (uint8_t *)duckdb_vector_get_data(type_vec);
-	duckdb_hugeint *addr_data = (duckdb_hugeint *)duckdb_vector_get_data(addr_vec);
-	uint16_t *mask_data = (uint16_t *)duckdb_vector_get_data(mask_vec);
-
-	const duckdb_cast_mode cast_mode = duckdb_cast_function_get_cast_mode(info);
-	const duckdb_string_t *text_data = (duckdb_string_t *)duckdb_vector_get_data(input);
-
-	uint64_t *source_validity = duckdb_vector_get_validity(input);
-	if (source_validity) {
-		// We might have NULL values, ensure the validity mask is writable
-		duckdb_vector_ensure_validity_writable(output);
-		duckdb_vector_ensure_validity_writable(type_vec);
-		duckdb_vector_ensure_validity_writable(addr_vec);
-		duckdb_vector_ensure_validity_writable(mask_vec);
-	}
-
-	uint64_t *target_validity = duckdb_vector_get_validity(output);
-	uint64_t *type_validity = duckdb_vector_get_validity(type_vec);
-	uint64_t *addr_validity = duckdb_vector_get_validity(addr_vec);
-	uint64_t *mask_validity = duckdb_vector_get_validity(mask_vec);
-
-	bool success = true;
-
-	for (idx_t i = 0; i < count; i++) {
-
-		if (source_validity && !duckdb_validity_row_is_valid(source_validity, i)) {
-			duckdb_validity_set_row_invalid(target_validity, i);
-			duckdb_validity_set_row_invalid(type_validity, i);
-			duckdb_validity_set_row_invalid(addr_validity, i);
-			duckdb_validity_set_row_invalid(mask_validity, i);
-			continue;
-		}
-
-		duckdb_string_t text = text_data[i];
-		const char *data = duckdb_string_t_data(&text);
-		size_t size = duckdb_string_t_length(text);
-
-		const char *error_message = "Failed to parse INET";
-		INET_IPAddress inet = ipaddress_from_string(data, size, &error_message);
-
-		// Did we succeed in parsing?
-		if (inet.type == INET_IP_ADDRESS_INVALID) {
-			// Set error message and null the output row (recursively)
-			duckdb_cast_function_set_row_error(info, error_message, i, output);
-
-			if (cast_mode != DUCKDB_CAST_TRY) {
-				return false;
-			}
-
-			// Try cast, continue with the next row
-			success = false;
-			continue;
-		}
-
-		type_data[i] = (uint8_t)inet.type;
-		addr_data[i] = to_compatible_address(inet.address, inet.type);
-		mask_data[i] = inet.mask;
-	}
-
-	return success;
 }
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -713,7 +646,7 @@ static void html_unescape_function_impl(duckdb_function_info info, duckdb_data_c
 
 class INetToVarcharCast : public CastFunction {
 public:
-	using SOURCE_TYPE = StructTypeTernary<PrimitiveType<uint8_t>, PrimitiveType<duckdb_hugeint>, PrimitiveType<uint16_t>>;
+	using SOURCE_TYPE = INET_EXECUTOR_TYPE;
 	using TARGET_TYPE = PrimitiveType<string_t>;
 	using STATIC_DATA = char[256];
 
@@ -740,12 +673,15 @@ public:
 	}
 
 	duckdb_cast_function_t GetFunction() override {
-		return CastFunction::GetCastFunction<INetToVarcharCast>;
+		return CastFunction::GetCastFunctionStatic<INetToVarcharCast>;
 	}
 };
 
 class VarcharToINetCast : public CastFunction {
 public:
+	using SOURCE_TYPE = PrimitiveType<string_t>;
+	using TARGET_TYPE = INET_EXECUTOR_TYPE;
+
 	LogicalType SourceType() override {
 		return LogicalType::VARCHAR();
 	}
@@ -758,8 +694,21 @@ public:
 		return -1;
 	}
 
+	static TARGET_TYPE::ARG_TYPE Cast(const SOURCE_TYPE::ARG_TYPE &input) {
+		auto data = input.GetData();
+		auto size = input.GetSize();
+
+		INET_IPAddress inet = ipaddress_from_string(data, size);
+
+		TARGET_TYPE::ARG_TYPE result;
+		result.a_val = (uint8_t)inet.type;
+		result.b_val = to_compatible_address(inet.address, inet.type);
+		result.c_val = inet.mask;
+		return result;
+	}
+
 	duckdb_cast_function_t GetFunction() override {
-		return text_to_inet_cast_impl;
+		return CastFunction::GetCastFunction<VarcharToINetCast>;
 	}
 };
 
