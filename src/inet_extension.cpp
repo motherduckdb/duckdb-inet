@@ -7,15 +7,15 @@
 #include <stdlib.h>
 #include <vector>
 
-// Forward declare vtable
-DUCKDB_EXTENSION_EXTERN
-
 #include "duckdb/stable/extension_loader.hpp"
 #include "duckdb/stable/generic_executor.hpp"
 #include "duckdb/stable/logical_type.hpp"
 #include "duckdb/stable/cast_function.hpp"
 #include "duckdb/stable/scalar_function.hpp"
 #include "duckdb/stable/string_type.hpp"
+
+// Forward declare vtable
+DUCKDB_EXTENSION_EXTERN
 
 using namespace duckdb_stable;
 
@@ -113,29 +113,6 @@ static duckdb_hugeint to_compatible_address(duckdb_uhugeint new_addr, INET_IPAdd
 	duckdb_hugeint retval;
 	memcpy(&retval, &new_addr, sizeof(duckdb_hugeint));
 	return retval;
-}
-
-static bool inet_to_text_cast_impl(duckdb_function_info info, idx_t count, duckdb_vector input, duckdb_vector output) {
-	CastExecutor executor(info);
-
-	using INET_TYPE = StructTypeTernary<PrimitiveType<uint8_t>, PrimitiveType<duckdb_hugeint>, PrimitiveType<uint16_t>>;
-	using STRING_TYPE = PrimitiveType<string_t>;
-
-	char buffer[256];
-	Vector input_vec(input);
-	Vector output_vec(output);
-	executor.ExecuteUnary<INET_TYPE, STRING_TYPE>(input_vec, output_vec, count, [&](const INET_TYPE::ARG_TYPE &input) {
-		INET_IPAddress inet;
-		inet.type = (INET_IPAddressType)input.a_val;
-		inet.address = from_compatible_address(input.b_val, inet.type);
-		inet.mask = input.c_val;
-
-		size_t written = ipaddress_to_string(&inet, buffer, sizeof(buffer));
-		ResultValue<string_t> result;
-		result.val = string_t(buffer, written);
-		return result;
-	});
-	return executor.Success();
 }
 
 static bool text_to_inet_cast_impl(duckdb_function_info info, idx_t count, duckdb_vector input, duckdb_vector output) {
@@ -736,6 +713,10 @@ static void html_unescape_function_impl(duckdb_function_info info, duckdb_data_c
 
 class INetToVarcharCast : public CastFunction {
 public:
+	using SOURCE_TYPE = StructTypeTernary<PrimitiveType<uint8_t>, PrimitiveType<duckdb_hugeint>, PrimitiveType<uint16_t>>;
+	using TARGET_TYPE = PrimitiveType<string_t>;
+	using STATIC_DATA = char[256];
+
 	LogicalType SourceType() override {
 		return make_inet_type();
 	}
@@ -748,8 +729,18 @@ public:
 		return -1;
 	}
 
+	static TARGET_TYPE::ARG_TYPE Cast(const SOURCE_TYPE::ARG_TYPE &input, STATIC_DATA &buffer) {
+		INET_IPAddress inet;
+		inet.type = (INET_IPAddressType)input.a_val;
+		inet.address = from_compatible_address(input.b_val, inet.type);
+		inet.mask = input.c_val;
+
+		size_t written = ipaddress_to_string(&inet, buffer, sizeof(buffer));
+		return string_t(buffer, written);
+	}
+
 	duckdb_cast_function_t GetFunction() override {
-		return inet_to_text_cast_impl;
+		return CastFunction::GetCastFunction<INetToVarcharCast>;
 	}
 };
 
@@ -1010,6 +1001,16 @@ public:
 	}
 };
 
+class HTMLEscapeSet : public ScalarFunctionSet {
+public:
+	HTMLEscapeSet() : ScalarFunctionSet("html_escape") {
+		HTMLEscapeFunction html_escape;
+		HTMLEscapeQuoteFunction html_quote_escape;
+		AddFunction(html_escape);
+		AddFunction(html_quote_escape);
+	}
+};
+
 class INetLoader : public ExtensionLoader {
 public:
 	INetLoader(duckdb_connection con, duckdb_extension_info info,
@@ -1068,11 +1069,7 @@ protected:
 		SubnetContainsOrEqualsFunction subnet_contains_or_equals;
 		Register(subnet_contains_or_equals);
 
-		ScalarFunctionSet html_escape_set("html_escape");
-		HTMLEscapeFunction html_escape;
-		HTMLEscapeQuoteFunction html_quote_escape;
-		html_escape_set.AddFunction(html_escape);
-		html_escape_set.AddFunction(html_quote_escape);
+		HTMLEscapeSet html_escape_set;
 		Register(html_escape_set);
 
 		HTMLUnescapeFunction html_unescape;
