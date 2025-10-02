@@ -129,44 +129,6 @@ static duckdb_hugeint to_compatible_address(duckdb_uhugeint new_addr, INET_IPAdd
 //----------------------------------------------------------------------------------------------------------------------
 // SCALAR FUNCTIONS
 //----------------------------------------------------------------------------------------------------------------------
-static void family_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
-
-	idx_t count = duckdb_data_chunk_get_size(input);
-
-	duckdb_vector inet_vec = duckdb_data_chunk_get_vector(input, 0);
-	duckdb_vector type_vec = duckdb_struct_vector_get_child(inet_vec, 0);
-
-	uint8_t *type_data = (uint8_t *)duckdb_vector_get_data(type_vec);
-	uint8_t *output_data = (uint8_t *)duckdb_vector_get_data(output);
-
-	uint64_t *source_validity = duckdb_vector_get_validity(inet_vec);
-	if (source_validity) {
-		// We might have NULL values, ensure the validity mask is writable
-		duckdb_vector_ensure_validity_writable(output);
-	}
-	uint64_t *target_validity = duckdb_vector_get_validity(output);
-
-	for (idx_t i = 0; i < count; i++) {
-
-		if (source_validity && !duckdb_validity_row_is_valid(source_validity, i)) {
-			duckdb_validity_set_row_invalid(target_validity, i);
-			continue;
-		}
-
-		switch ((INET_IPAddressType)type_data[i]) {
-		case INET_IP_ADDRESS_V4:
-			output_data[i] = 4;
-			break;
-		case INET_IP_ADDRESS_V6:
-			output_data[i] = 6;
-			break;
-		default:
-			duckdb_scalar_function_set_error(info, "Invalid IP address type");
-			return;
-		}
-	}
-}
-
 static void generic_inet_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output,
                                        INET_IPAddress (*func)(const INET_IPAddress *ip)) {
 	idx_t count = duckdb_data_chunk_get_size(input);
@@ -606,25 +568,18 @@ static void html_unescape_function_impl(duckdb_function_info info, duckdb_data_c
 	}
 }
 
-class INetToVarcharCast : public CastFunction {
+struct StringBuffer {
+	char buffer[256];
+};
+
+class INetToVarcharCast : public StandardCastFunction<INetToVarcharCast, INET_EXECUTOR_TYPE, PrimitiveType<string_t>, StringBuffer>  {
 public:
-	using SOURCE_TYPE = INET_EXECUTOR_TYPE;
-	using TARGET_TYPE = PrimitiveType<string_t>;
-	using STATIC_DATA = char[256];
-
-	LogicalType SourceType() override {
-		return make_inet_type();
-	}
-
-	LogicalType TargetType() override {
-		return LogicalType::VARCHAR();
-	}
-
 	int64_t ImplicitCastCost() override {
 		return -1;
 	}
 
-	static TARGET_TYPE::ARG_TYPE Cast(const SOURCE_TYPE::ARG_TYPE &input, STATIC_DATA &buffer) {
+	static TARGET_TYPE::ARG_TYPE Cast(const SOURCE_TYPE::ARG_TYPE &input, STATIC_DATA &data) {
+		auto &buffer = data.buffer;
 		INET_IPAddress inet;
 		inet.type = (INET_IPAddressType)input.a_val;
 		inet.address = from_compatible_address(input.b_val, inet.type);
@@ -633,25 +588,10 @@ public:
 		size_t written = ipaddress_to_string(&inet, buffer, sizeof(buffer));
 		return string_t(buffer, written);
 	}
-
-	duckdb_cast_function_t GetFunction() override {
-		return CastFunction::GetCastFunctionStatic<INetToVarcharCast>;
-	}
 };
 
-class VarcharToINetCast : public CastFunction {
+class VarcharToINetCast : public StandardCastFunction<VarcharToINetCast, PrimitiveType<string_t>, INET_EXECUTOR_TYPE> {
 public:
-	using SOURCE_TYPE = PrimitiveType<string_t>;
-	using TARGET_TYPE = INET_EXECUTOR_TYPE;
-
-	LogicalType SourceType() override {
-		return LogicalType::VARCHAR();
-	}
-
-	LogicalType TargetType() override {
-		return make_inet_type();
-	}
-
 	int64_t ImplicitCastCost() override {
 		return -1;
 	}
@@ -668,21 +608,16 @@ public:
 		result.c_val = inet.mask;
 		return result;
 	}
-
-	duckdb_cast_function_t GetFunction() override {
-		return CastFunction::GetCastFunction<VarcharToINetCast>;
-	}
 };
 
-class HostFunction : public UnaryFunction<HostFunction, INET_EXECUTOR_TYPE, PrimitiveType<string_t>> {
+class HostFunction : public UnaryFunction<HostFunction, INET_EXECUTOR_TYPE, PrimitiveType<string_t>, StringBuffer> {
 public:
-	using STATIC_DATA = char[256];
-
 	const char *Name() const override {
 		return "host";
 	}
 
-	static RESULT_TYPE::ARG_TYPE Operation(const INPUT_TYPE::ARG_TYPE &input, STATIC_DATA &buffer) {
+	static RESULT_TYPE::ARG_TYPE Operation(const INPUT_TYPE::ARG_TYPE &input, STATIC_DATA &data) {
+		auto &buffer = data.buffer;
 		INET_IPAddress inet;
 		inet.type = (INET_IPAddressType)input.a_val;
 		inet.address = from_compatible_address(input.b_val, inet.type);
@@ -700,21 +635,22 @@ public:
 	}
 };
 
-class FamilyFunction : public ScalarFunction {
+class FamilyFunction : public UnaryFunction<FamilyFunction, INET_EXECUTOR_TYPE, PrimitiveType<uint8_t>> {
 public:
 	const char *Name() const override {
 		return "family";
 	}
-	LogicalType ReturnType() const override {
-		return LogicalType::UTINYINT();
-	}
-	std::vector<LogicalType> Arguments() const override {
-		std::vector<LogicalType> result;
-		result.push_back(make_inet_type());
-		return result;
-	}
-	duckdb_scalar_function_t GetFunction() const override {
-		return family_function_impl;
+
+	static RESULT_TYPE::ARG_TYPE Operation(const INPUT_TYPE::ARG_TYPE &input) {
+		switch ((INET_IPAddressType)input.a_val) {
+		case INET_IP_ADDRESS_V4:
+			return 4;
+		break;
+		case INET_IP_ADDRESS_V6:
+			return 6;
+		default:
+			throw std::runtime_error("Invalid IP address type");
+		}
 	}
 };
 
