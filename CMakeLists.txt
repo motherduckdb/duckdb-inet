@@ -6,6 +6,9 @@ set(DUCKDB_EXTENSION_API_VERSION_UNSTABLE 1)
 ###
 # Configuration
 ###
+
+include_directories(src)
+
 if(NOT DEFINED EXTENSION_NAME)
     message(FATAL_ERROR "DuckDB extension name is required")
 endif()
