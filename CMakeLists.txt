@@ -9,9 +9,6 @@ set(DUCKDB_EXTENSION_API_VERSION_UNSTABLE 1)
 # Configuration
 ###
 
-include_directories(duckdb_capi)
-include_directories(duckdb-cpp-api)
-
 if(NOT DEFINED EXTENSION_NAME)
     message(FATAL_ERROR "DuckDB extension name is required")
 endif()
@@ -56,3 +53,12 @@ set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(VISIBILITY_INLINES_HIDDEN ON)
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -s")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -s")
+
+# Include own headers
+target_include_directories(${EXTENSION_NAME} PRIVATE src)
+
+# Include DuckDB C API headers
+target_include_directories(${EXTENSION_NAME} PRIVATE duckdb_capi)
+
+# Include DuckDB C++ API headers
+target_include_directories(${EXTENSION_NAME} PRIVATE duckdb-cpp-api)
