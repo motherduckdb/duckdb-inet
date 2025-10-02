@@ -1,6 +1,6 @@
 #include "inet_html.hpp"
 #include "inet_html_table.hpp"
-#include "duckdb/stable/string_util.hpp"
+#include "duckdb/duckdb_stable.hpp"
 
 #include <ctype.h>
 #include <stdbool.h>

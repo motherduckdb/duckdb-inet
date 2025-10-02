@@ -7,15 +7,7 @@
 #include <stdlib.h>
 #include <vector>
 
-#include "duckdb/stable/extension_loader.hpp"
-#include "duckdb/stable/executor.hpp"
-#include "duckdb/stable/logical_type.hpp"
-#include "duckdb/stable/cast_function.hpp"
-#include "duckdb/stable/scalar_function.hpp"
-#include "duckdb/stable/string_type.hpp"
-#include "duckdb/stable/hugeint.hpp"
-#include "duckdb/stable/uhugeint.hpp"
-#include "duckdb/stable/exception.hpp"
+#include "duckdb/duckdb_stable.hpp"
 
 // Forward declare vtable
 DUCKDB_EXTENSION_EXTERN
@@ -43,7 +35,7 @@ static LogicalType make_inet_type() {
 namespace duckdb_stable {
 
 template<>
-LogicalType TemplateToType<INET_EXECUTOR_TYPE>() {
+LogicalType TemplateToType::Convert<INET_EXECUTOR_TYPE>() {
 	return make_inet_type();
 }
 

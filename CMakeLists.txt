@@ -1,13 +1,17 @@
+project(inet)
+
 cmake_minimum_required(VERSION 3.5...3.29)
 option(DUCKDB_WASM_EXTENSION "Whether compiling for Wasm target" OFF)
 
 set(EXTENSION_NAME inet)
 set(DUCKDB_EXTENSION_API_VERSION_UNSTABLE 1)
+add_definitions(-DDUCKDB_EXTENSION_API_VERSION_UNSTABLE)
 ###
 # Configuration
 ###
 
-include_directories(src)
+include_directories(duckdb_capi)
+include_directories(duckdb-cpp-api)
 
 if(NOT DEFINED EXTENSION_NAME)
     message(FATAL_ERROR "DuckDB extension name is required")
@@ -35,7 +39,11 @@ set(EXTENSION_SOURCES
         src/inet_ipaddress.cpp
 )
 
-build_loadable_extension_capi_unstable(${EXTENSION_NAME} ${EXTENSION_SOURCES})
+if (DUCKDB_WASM_EXTENSION)
+    add_library(${EXTENSION_NAME} STATIC ${EXTENSION_SOURCES})
+else()
+    add_library(${EXTENSION_NAME} SHARED ${EXTENSION_SOURCES})
+endif()
 
 # Hide symbols
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
