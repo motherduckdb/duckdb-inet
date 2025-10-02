@@ -44,6 +44,8 @@ if (DUCKDB_WASM_EXTENSION)
 else()
     add_library(${EXTENSION_NAME} SHARED ${EXTENSION_SOURCES})
 endif()
+# for building with DuckDB - FIXME - this needs to be reconciled somehow
+# build_loadable_extension_capi_unstable(${EXTENSION_NAME} ${EXTENSION_SOURCES})
 
 # Hide symbols
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
