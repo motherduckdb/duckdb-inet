@@ -3,4 +3,4 @@
 	url = https://github.com/duckdb/extension-ci-tools.git
 [submodule "duckdb-cpp-api"]
 	path = duckdb-cpp-api
-	url = git@github.com:duckdb/duckdb-cpp-api.git
+	url = https://github.com/duckdb/duckdb-cpp-api
