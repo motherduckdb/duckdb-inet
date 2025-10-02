@@ -482,78 +482,62 @@ public:
 	}
 };
 
-class INetLoader : public ExtensionLoader {
-public:
-	INetLoader(duckdb_connection con, duckdb_extension_info info,
-                            struct duckdb_extension_access *access) :
-		ExtensionLoader(con, info, access) {
-	}
-
-protected:
-	void Load() override {
-		auto inet_type = make_inet_type();
-		auto text_type = LogicalType::VARCHAR();
-		auto bool_type = LogicalType::BOOLEAN();
-		auto utinyint_type = LogicalType::UTINYINT();
-		auto hugeint_type = LogicalType::HUGEINT();
-
-		Register(inet_type);
-
-		// Register cast functions
-		INetToVarcharCast inet_to_text;
-		Register(inet_to_text);
-
-		VarcharToINetCast text_to_inet;
-		Register(text_to_inet);
-
-		// scalar functions
-		HostFunction host_function;
-		Register(host_function);
-
-		FamilyFunction family_function;
-		Register(family_function);
-
-		NetmaskFunction netmask_function;
-		Register(netmask_function);
-
-		NetworkFunction network_function;
-		Register(network_function);
-
-		BroadcastFunction broadcast_function;
-		Register(broadcast_function);
-
-		AddFunction add_function;
-		Register(add_function);
-
-		SubtractFunction subtract_function;
-		Register(subtract_function);
-
-		ContainsLeftFunction contains_left;
-		Register(contains_left);
-
-		SubnetContainedByOrEquals subnet_contained_by_or_equals;
-		Register(subnet_contained_by_or_equals);
-
-		ContainsRightFunction contains_right;
-		Register(contains_right);
-
-		SubnetContainsOrEqualsFunction subnet_contains_or_equals;
-		Register(subnet_contains_or_equals);
-
-		HTMLEscapeSet html_escape_set;
-		Register(html_escape_set);
-
-		HTMLUnescapeFunction html_unescape;
-		Register(html_unescape);
-	}
-};
-
 //----------------------------------------------------------------------------------------------------------------------
 // EXTENSION ENTRY
 //----------------------------------------------------------------------------------------------------------------------
+DUCKDB_EXTENSION_CPP_ENTRYPOINT(INET) {
+	auto inet_type = make_inet_type();
+	auto text_type = LogicalType::VARCHAR();
+	auto bool_type = LogicalType::BOOLEAN();
+	auto utinyint_type = LogicalType::UTINYINT();
+	auto hugeint_type = LogicalType::HUGEINT();
 
-DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection con, duckdb_extension_info info,
-                            struct duckdb_extension_access *access) {
-    INetLoader loader(con, info, access);
-    return loader.LoadExtension();
+	Register(inet_type);
+
+	// Register cast functions
+	INetToVarcharCast inet_to_text;
+	Register(inet_to_text);
+
+	VarcharToINetCast text_to_inet;
+	Register(text_to_inet);
+
+	// scalar functions
+	HostFunction host_function;
+	Register(host_function);
+
+	FamilyFunction family_function;
+	Register(family_function);
+
+	NetmaskFunction netmask_function;
+	Register(netmask_function);
+
+	NetworkFunction network_function;
+	Register(network_function);
+
+	BroadcastFunction broadcast_function;
+	Register(broadcast_function);
+
+	AddFunction add_function;
+	Register(add_function);
+
+	SubtractFunction subtract_function;
+	Register(subtract_function);
+
+	ContainsLeftFunction contains_left;
+	Register(contains_left);
+
+	SubnetContainedByOrEquals subnet_contained_by_or_equals;
+	Register(subnet_contained_by_or_equals);
+
+	ContainsRightFunction contains_right;
+	Register(contains_right);
+
+	SubnetContainsOrEqualsFunction subnet_contains_or_equals;
+	Register(subnet_contains_or_equals);
+
+	HTMLEscapeSet html_escape_set;
+	Register(html_escape_set);
+
+	HTMLUnescapeFunction html_unescape;
+	Register(html_unescape);
 }
