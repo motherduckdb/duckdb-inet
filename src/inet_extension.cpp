@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "duckdb/stable/extension_loader.hpp"
-#include "duckdb/stable/generic_executor.hpp"
+#include "duckdb/stable/executor.hpp"
 #include "duckdb/stable/logical_type.hpp"
 #include "duckdb/stable/cast_function.hpp"
 #include "duckdb/stable/scalar_function.hpp"
@@ -87,6 +87,16 @@ static LogicalType make_inet_type() {
 	return inet_type;
 }
 
+namespace duckdb_stable {
+
+template<>
+LogicalType TemplateToType<INET_EXECUTOR_TYPE>() {
+	return make_inet_type();
+}
+
+}
+
+
 //----------------------------------------------------------------------------------------------------------------------
 // CAST FUNCTIONS
 //----------------------------------------------------------------------------------------------------------------------
@@ -119,54 +129,6 @@ static duckdb_hugeint to_compatible_address(duckdb_uhugeint new_addr, INET_IPAdd
 //----------------------------------------------------------------------------------------------------------------------
 // SCALAR FUNCTIONS
 //----------------------------------------------------------------------------------------------------------------------
-static void host_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
-
-	idx_t count = duckdb_data_chunk_get_size(input);
-
-	duckdb_vector inet_vec = duckdb_data_chunk_get_vector(input, 0);
-	duckdb_vector type_vec = duckdb_struct_vector_get_child(inet_vec, 0);
-	duckdb_vector addr_vec = duckdb_struct_vector_get_child(inet_vec, 1);
-
-	const uint8_t *type_data = (uint8_t *)duckdb_vector_get_data(type_vec);
-	const duckdb_hugeint *addr_data = (duckdb_hugeint *)duckdb_vector_get_data(addr_vec);
-
-	uint64_t *source_validity = duckdb_vector_get_validity(inet_vec);
-	if (source_validity) {
-		// We might have NULL values, ensure the validity mask is writable
-		duckdb_vector_ensure_validity_writable(output);
-	}
-	uint64_t *target_validity = duckdb_vector_get_validity(output);
-
-	INET_IPAddress inet;
-	char buffer[256];
-
-	for (idx_t i = 0; i < count; i++) {
-
-		if (source_validity && !duckdb_validity_row_is_valid(source_validity, i)) {
-			duckdb_validity_set_row_invalid(target_validity, i);
-			continue;
-		}
-
-		inet.type = (INET_IPAddressType)type_data[i];
-		inet.address = from_compatible_address(addr_data[i], inet.type);
-		inet.mask = inet.type == INET_IP_ADDRESS_V4 ? 32 : 128;
-
-		size_t written = ipaddress_to_string(&inet, buffer, sizeof(buffer));
-
-		if (written == 0) {
-			duckdb_scalar_function_set_error(info, "Could not write inet string");
-			return;
-		}
-		if (written >= sizeof(buffer)) {
-			duckdb_scalar_function_set_error(info, "Could not write string");
-			return;
-		}
-
-		// Assign the string to the output vector
-		duckdb_vector_assign_string_element_len(output, i, buffer, written);
-	}
-}
-
 static void family_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
 
 	idx_t count = duckdb_data_chunk_get_size(input);
@@ -712,21 +674,29 @@ public:
 	}
 };
 
-class HostFunction : public ScalarFunction {
+class HostFunction : public UnaryFunction<HostFunction, INET_EXECUTOR_TYPE, PrimitiveType<string_t>> {
 public:
+	using STATIC_DATA = char[256];
+
 	const char *Name() const override {
 		return "host";
 	}
-	LogicalType ReturnType() const override {
-		return LogicalType::VARCHAR();
-	}
-	std::vector<LogicalType> Arguments() const override {
-		std::vector<LogicalType> result;
-		result.push_back(make_inet_type());
-		return result;
-	}
-	duckdb_scalar_function_t GetFunction() const override {
-		return host_function_impl;
+
+	static RESULT_TYPE::ARG_TYPE Operation(const INPUT_TYPE::ARG_TYPE &input, STATIC_DATA &buffer) {
+		INET_IPAddress inet;
+		inet.type = (INET_IPAddressType)input.a_val;
+		inet.address = from_compatible_address(input.b_val, inet.type);
+		inet.mask = inet.type == INET_IP_ADDRESS_V4 ? 32 : 128;
+
+		size_t len = ipaddress_to_string(&inet, buffer, sizeof(buffer));
+
+		if (len == 0) {
+			throw std::runtime_error("Could not write inet string");
+		}
+		if (len >= sizeof(buffer)) {
+			throw std::runtime_error("Could not write string");
+		}
+		return string_t(buffer, len);
 	}
 };
 
