@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
+#include <memory>
 
 #include "duckdb/duckdb_stable.hpp"
 
