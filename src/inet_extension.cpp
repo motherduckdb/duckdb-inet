@@ -163,7 +163,7 @@ struct StringBuffer {
 	char buffer[256];
 };
 
-class INetToVarcharCast : public StandardCastFunction<INetToVarcharCast, INET_EXECUTOR_TYPE, PrimitiveType<string_t>, StringBuffer>  {
+class INetToVarcharCast : public StandardCastFunctionExt<INetToVarcharCast, INET_EXECUTOR_TYPE, PrimitiveType<string_t>, StringBuffer>  {
 public:
 	int64_t ImplicitCastCost() override {
 		return -1;
@@ -201,7 +201,7 @@ public:
 	}
 };
 
-class HostFunction : public UnaryFunction<HostFunction, INET_EXECUTOR_TYPE, PrimitiveType<string_t>, StringBuffer> {
+class HostFunction : public UnaryFunctionExt<HostFunction, INET_EXECUTOR_TYPE, PrimitiveType<string_t>, StringBuffer> {
 public:
 	const char *Name() const override {
 		return "host";
@@ -446,21 +446,21 @@ public:
 	}
 };
 
-class HTMLEscapeFunction : public UnaryFunction<HTMLEscapeFunction, PrimitiveType<string_t>, PrimitiveType<string_t>, HTMLEscapeBuffer> {
+class HTMLEscapeFunction : public UnaryFunctionExt<HTMLEscapeFunction, PrimitiveType<string_t>, PrimitiveType<string_t>, HTMLEscapeBuffer> {
 public:
 	static RESULT_TYPE::ARG_TYPE Operation(const INPUT_TYPE::ARG_TYPE &input, HTMLEscapeBuffer &buffer) {
 		return escape_html(input, true, buffer);
 	}
 };
 
-class HTMLEscapeQuoteFunction : public BinaryFunction<HTMLEscapeQuoteFunction, PrimitiveType<string_t>, PrimitiveType<bool>, PrimitiveType<string_t>, HTMLEscapeBuffer> {
+class HTMLEscapeQuoteFunction : public BinaryFunctionExt<HTMLEscapeQuoteFunction, PrimitiveType<string_t>, PrimitiveType<bool>, PrimitiveType<string_t>, HTMLEscapeBuffer> {
 public:
 	static RESULT_TYPE::ARG_TYPE Operation(const A_TYPE::ARG_TYPE &input, const B_TYPE::ARG_TYPE &input_quote, HTMLEscapeBuffer &buffer) {
 		return escape_html(input, input_quote, buffer);
 	}
 };
 
-class HTMLUnescapeFunction : public UnaryFunction<HTMLUnescapeFunction, PrimitiveType<string_t>, PrimitiveType<string_t>, HTMLEscapeBuffer> {
+class HTMLUnescapeFunction : public UnaryFunctionExt<HTMLUnescapeFunction, PrimitiveType<string_t>, PrimitiveType<string_t>, HTMLEscapeBuffer> {
 public:
 	const char *Name() const override {
 		return "html_unescape";
