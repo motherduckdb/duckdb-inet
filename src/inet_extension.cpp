@@ -13,67 +13,19 @@
 #include "duckdb/stable/cast_function.hpp"
 #include "duckdb/stable/scalar_function.hpp"
 #include "duckdb/stable/string_type.hpp"
+#include "duckdb/stable/hugeint.hpp"
+#include "duckdb/stable/uhugeint.hpp"
 
 // Forward declare vtable
 DUCKDB_EXTENSION_EXTERN
 
 using namespace duckdb_stable;
 
-
-//----------------------------------------------------------------------------------------------------------------------
-// HUGEINT/UHUGEINT CONVERSION HELPERS
-//----------------------------------------------------------------------------------------------------------------------
-
-static duckdb_uhugeint hugeint_to_uhugeint(duckdb_hugeint *input) {
-	duckdb_uhugeint retval;
-	retval.lower = input->lower;
-	retval.upper = (uint64_t)input->upper;
-	return retval;
-}
-
-static bool uhugeint_try_add(const duckdb_uhugeint *lhs, const duckdb_uhugeint *rhs, duckdb_uhugeint *result) {
-	uint64_t new_upper = lhs->upper + rhs->upper;
-	bool no_overflow = !(new_upper < lhs->upper || new_upper < rhs->upper);
-	new_upper += (lhs->lower + rhs->lower) < lhs->lower;
-	if (new_upper < lhs->upper || new_upper < rhs->upper) {
-		no_overflow = false;
-	}
-	result->upper = new_upper;
-	result->lower = lhs->lower + rhs->lower;
-	return no_overflow;
-}
-
-static bool uhugeint_try_sub(const duckdb_uhugeint *lhs, const duckdb_uhugeint *rhs, duckdb_uhugeint *result) {
-	const uint64_t new_upper = lhs->upper - rhs->upper - ((lhs->lower - rhs->lower) > lhs->lower);
-	const bool no_overflow = !(new_upper > lhs->upper);
-
-	result->lower = (lhs->lower - rhs->lower);
-	result->upper = new_upper;
-	return no_overflow;
-}
-
-static bool hugeint_is_positive(const duckdb_hugeint *input) {
-	bool upper_bigger = input->upper > 0;
-	bool upper_equal = input->upper == 0;
-	bool lower_bigger = input->lower > 0;
-	return upper_bigger || (upper_equal && lower_bigger);
-}
-
-static bool hugeint_is_zero(const duckdb_hugeint *input) {
-	return input->upper == 0 && input->lower == 0;
-}
-
-static duckdb_hugeint hugeint_negate(const duckdb_hugeint *input) {
-	duckdb_hugeint result;
-	result.lower = UINT64_MAX - input->lower + 1ull;
-	result.upper = -1 - input->upper + (input->lower == 0);
-	return result;
-}
-
 //----------------------------------------------------------------------------------------------------------------------
 // INET TYPE DEFINITION
 //----------------------------------------------------------------------------------------------------------------------
 using INET_EXECUTOR_TYPE = StructTypeTernary<PrimitiveType<uint8_t>, PrimitiveType<duckdb_hugeint>, PrimitiveType<uint16_t>>;
+using INET_T = INET_EXECUTOR_TYPE::ARG_TYPE;
 
 static LogicalType make_inet_type() {
 	const char *child_names[] = {"ip_type", "address", "mask"};
@@ -95,7 +47,6 @@ LogicalType TemplateToType<INET_EXECUTOR_TYPE>() {
 }
 
 }
-
 
 //----------------------------------------------------------------------------------------------------------------------
 // CAST FUNCTIONS
@@ -126,197 +77,28 @@ static duckdb_hugeint to_compatible_address(duckdb_uhugeint new_addr, INET_IPAdd
 }
 
 //----------------------------------------------------------------------------------------------------------------------
-// SCALAR FUNCTIONS
-//----------------------------------------------------------------------------------------------------------------------
-static void arithmetic_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output,
-                                     bool is_add) {
-	idx_t count = duckdb_data_chunk_get_size(input);
-
-	duckdb_vector source_inet_vec = duckdb_data_chunk_get_vector(input, 0);
-	duckdb_vector number_vec = duckdb_data_chunk_get_vector(input, 1);
-
-	duckdb_vector source_type_vec = duckdb_struct_vector_get_child(source_inet_vec, 0);
-	duckdb_vector source_addr_vec = duckdb_struct_vector_get_child(source_inet_vec, 1);
-	duckdb_vector source_mask_vec = duckdb_struct_vector_get_child(source_inet_vec, 2);
-
-	duckdb_vector target_type_vec = duckdb_struct_vector_get_child(output, 0);
-	duckdb_vector target_addr_vec = duckdb_struct_vector_get_child(output, 1);
-	duckdb_vector target_mask_vec = duckdb_struct_vector_get_child(output, 2);
-
-	const uint8_t *source_type_data = (uint8_t *)duckdb_vector_get_data(source_type_vec);
-	const duckdb_hugeint *source_addr_data = (duckdb_hugeint *)duckdb_vector_get_data(source_addr_vec);
-	const uint16_t *source_mask_data = (uint16_t *)duckdb_vector_get_data(source_mask_vec);
-
-	duckdb_hugeint *number_data = (duckdb_hugeint *)duckdb_vector_get_data(number_vec);
-
-	uint8_t *target_type_data = (uint8_t *)duckdb_vector_get_data(target_type_vec);
-	duckdb_hugeint *target_addr_data = (duckdb_hugeint *)duckdb_vector_get_data(target_addr_vec);
-	uint16_t *target_mask_data = (uint16_t *)duckdb_vector_get_data(target_mask_vec);
-
-	uint64_t *source_validity = duckdb_vector_get_validity(source_inet_vec);
-	uint64_t *number_validity = duckdb_vector_get_validity(number_vec);
-	if (source_validity || number_validity) {
-		// We might have NULL values, ensure the validity mask is writable
-		duckdb_vector_ensure_validity_writable(output);
-		duckdb_vector_ensure_validity_writable(target_type_vec);
-		duckdb_vector_ensure_validity_writable(target_addr_vec);
-		duckdb_vector_ensure_validity_writable(target_mask_vec);
-	}
-
-	uint64_t *target_validity = duckdb_vector_get_validity(output);
-	uint64_t *target_type_validity = duckdb_vector_get_validity(target_type_vec);
-	uint64_t *target_addr_validity = duckdb_vector_get_validity(target_addr_vec);
-	uint64_t *target_mask_validity = duckdb_vector_get_validity(target_mask_vec);
-
-	for (idx_t i = 0; i < count; i++) {
-		if ((source_validity && !duckdb_validity_row_is_valid(source_validity, i)) ||
-		    (number_validity && !duckdb_validity_row_is_valid(number_validity, i))) {
-			duckdb_validity_set_row_invalid(target_validity, i);
-			duckdb_validity_set_row_invalid(target_type_validity, i);
-			duckdb_validity_set_row_invalid(target_addr_validity, i);
-			duckdb_validity_set_row_invalid(target_mask_validity, i);
-			continue;
-		}
-
-		duckdb_hugeint number;
-		if (is_add) {
-			// +
-			number = number_data[i];
-		} else {
-			// -
-			number = hugeint_negate(&number_data[i]);
-		}
-
-		if (hugeint_is_zero(&number)) {
-			// Nothing to add, pass on the data
-			target_type_data[i] = source_type_data[i];
-			target_addr_data[i] = source_addr_data[i];
-			target_mask_data[i] = source_mask_data[i];
-			continue;
-		}
-
-		duckdb_uhugeint address_in =
-		    from_compatible_address(source_addr_data[i], (INET_IPAddressType)source_type_data[i]);
-		duckdb_uhugeint address_out = address_in;
-
-		if (hugeint_is_positive(&number)) {
-			duckdb_uhugeint unsigned_number = hugeint_to_uhugeint(&number);
-			if (!uhugeint_try_add(&address_in, &unsigned_number, &address_out)) {
-				duckdb_scalar_function_set_error(info, "Out of Range Error: Overflow in addition");
-				return;
-			}
-		} else {
-			duckdb_hugeint negated_number = hugeint_negate(&number);
-			duckdb_uhugeint unsigned_number = hugeint_to_uhugeint(&negated_number);
-			if (!uhugeint_try_sub(&address_in, &unsigned_number, &address_out)) {
-				duckdb_scalar_function_set_error(info, "Out of Range Error: Overflow in subtraction");
-				return;
-			}
-		}
-
-		if (source_type_data[i] == INET_IP_ADDRESS_V4) {
-			// Check if overflow ipv4
-			if (address_out.lower >= 0xffffffff) {
-				duckdb_scalar_function_set_error(info, "Out of Range Error: Cannot add 1");
-				return;
-			}
-		}
-
-		target_type_data[i] = source_type_data[i];
-		target_addr_data[i] = to_compatible_address(address_out, (INET_IPAddressType)source_type_data[i]);
-		target_mask_data[i] = source_mask_data[i];
-	}
-}
-
-static void add_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
-	arithmetic_function_impl(info, input, output, true);
-}
-
-static void sub_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
-	arithmetic_function_impl(info, input, output, false);
-}
-
-static void contains_impl(duckdb_vector lhs_inet_vec, duckdb_vector rhs_inet_vec, idx_t count, duckdb_vector output) {
-
-	duckdb_vector lhs_type_vec = duckdb_struct_vector_get_child(lhs_inet_vec, 0);
-	duckdb_vector lhs_addr_vec = duckdb_struct_vector_get_child(lhs_inet_vec, 1);
-	duckdb_vector lhs_mask_vec = duckdb_struct_vector_get_child(lhs_inet_vec, 2);
-
-	duckdb_vector rhs_type_vec = duckdb_struct_vector_get_child(rhs_inet_vec, 0);
-	duckdb_vector rhs_addr_vec = duckdb_struct_vector_get_child(rhs_inet_vec, 1);
-	duckdb_vector rhs_mask_vec = duckdb_struct_vector_get_child(rhs_inet_vec, 2);
-
-	const uint8_t *lhs_type_data = (uint8_t *)duckdb_vector_get_data(lhs_type_vec);
-	const duckdb_hugeint *lhs_addr_data = (duckdb_hugeint *)duckdb_vector_get_data(lhs_addr_vec);
-	const uint16_t *lhs_mask_data = (uint16_t *)duckdb_vector_get_data(lhs_mask_vec);
-
-	const uint8_t *rhs_type_data = (uint8_t *)duckdb_vector_get_data(rhs_type_vec);
-	const duckdb_hugeint *rhs_addr_data = (duckdb_hugeint *)duckdb_vector_get_data(rhs_addr_vec);
-	const uint16_t *rhs_mask_data = (uint16_t *)duckdb_vector_get_data(rhs_mask_vec);
-
-	bool *output_data = (bool *)duckdb_vector_get_data(output);
-
-	uint64_t *left_validity = duckdb_vector_get_validity(lhs_inet_vec);
-	uint64_t *right_validity = duckdb_vector_get_validity(rhs_inet_vec);
-	if (left_validity || right_validity) {
-		// We might have NULL values, ensure the validity mask is writable
-		duckdb_vector_ensure_validity_writable(output);
-	}
-	uint64_t *target_validity = duckdb_vector_get_validity(output);
-
-	for (idx_t i = 0; i < count; i++) {
-		if ((left_validity && !duckdb_validity_row_is_valid(left_validity, i)) ||
-		    (right_validity && !duckdb_validity_row_is_valid(right_validity, i))) {
-			duckdb_validity_set_row_invalid(target_validity, i);
-			continue;
-		}
-
-		INET_IPAddress lhs_inet;
-		lhs_inet.type = (INET_IPAddressType)lhs_type_data[i];
-		lhs_inet.address = from_compatible_address(lhs_addr_data[i], lhs_inet.type);
-		lhs_inet.mask = lhs_mask_data[i];
-
-		INET_IPAddress rhs_inet;
-		rhs_inet.type = (INET_IPAddressType)rhs_type_data[i];
-		rhs_inet.address = from_compatible_address(rhs_addr_data[i], rhs_inet.type);
-		rhs_inet.mask = rhs_mask_data[i];
-
-		INET_IPAddress lhs_network = ipaddress_network(&lhs_inet);
-		INET_IPAddress lhs_broadcast = ipaddress_broadcast(&lhs_inet);
-
-		INET_IPAddress rhs_network = ipaddress_network(&rhs_inet);
-		INET_IPAddress rhs_broadcast = ipaddress_broadcast(&rhs_inet);
-
-		// Set the output
-		const bool network_in_lower = lhs_network.address.lower >= rhs_network.address.lower;
-		const bool network_in_upper = lhs_network.address.upper >= rhs_network.address.upper;
-		const bool broadcast_in_lower = lhs_broadcast.address.lower <= rhs_broadcast.address.lower;
-		const bool broadcast_in_upper = lhs_broadcast.address.upper <= rhs_broadcast.address.upper;
-
-		output_data[i] = network_in_lower && network_in_upper && broadcast_in_lower && broadcast_in_upper;
-	}
-}
-
-static void contains_left_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
-	idx_t count = duckdb_data_chunk_get_size(input);
-	duckdb_vector lhs_inet_vec = duckdb_data_chunk_get_vector(input, 0);
-	duckdb_vector rhs_inet_vec = duckdb_data_chunk_get_vector(input, 1);
-	contains_impl(lhs_inet_vec, rhs_inet_vec, count, output);
-}
-
-static void contains_right_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
-	idx_t count = duckdb_data_chunk_get_size(input);
-	duckdb_vector lhs_inet_vec = duckdb_data_chunk_get_vector(input, 1);
-	duckdb_vector rhs_inet_vec = duckdb_data_chunk_get_vector(input, 0);
-	contains_impl(lhs_inet_vec, rhs_inet_vec, count, output);
-}
-
-//----------------------------------------------------------------------------------------------------------------------
 // HTML ESCAPE
 //----------------------------------------------------------------------------------------------------------------------
+struct HTMLEscapeBuffer {
+	std::unique_ptr<char[]> buffer;
+	idx_t size = 0;
 
-static void escape_html(duckdb_function_info info, duckdb_vector output, idx_t index, const char *input_data,
-                        idx_t input_size, bool input_quote) {
+	char *GetData() {
+		return buffer.get();
+	}
+	void Allocate(idx_t new_size) {
+		if (new_size <= size) {
+			// already have enough space
+			return;
+		}
+		buffer = std::unique_ptr<char[]>(new char[new_size]);
+		size = new_size;
+	}
+};
+
+static string_t escape_html(string_t input, bool input_quote, HTMLEscapeBuffer &buffer) {
+	auto input_data = input.GetData();
+	auto input_size = input.GetSize();
 
 	const idx_t QUOTE_SZ = 1;
 	const idx_t AMPERSAND_SZ = 5;
@@ -342,12 +124,8 @@ static void escape_html(duckdb_function_info info, duckdb_vector output, idx_t i
 		}
 	}
 
-	// Ugh, malloc a new string...
-	char *result_data = (char *)duckdb_malloc(result_size);
-	if (!result_data) {
-		duckdb_scalar_function_set_error(info, "Failed to allocate memory for html escape");
-		return;
-	}
+	buffer.Allocate(result_size);
+	auto result_data = buffer.GetData();
 
 	size_t pos = 0;
 	for (idx_t j = 0; j < input_size; j++) {
@@ -385,116 +163,7 @@ static void escape_html(duckdb_function_info info, duckdb_vector output, idx_t i
 		}
 	}
 
-	// Assign the string to the output vector
-	duckdb_vector_assign_string_element_len(output, index, result_data, result_size);
-
-	// Free the temporary string again
-	duckdb_free(result_data);
-}
-
-static void html_escape_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
-
-	idx_t count = duckdb_data_chunk_get_size(input);
-
-	duckdb_vector html_vec = duckdb_data_chunk_get_vector(input, 0);
-	duckdb_string_t *html_data = (duckdb_string_t *)duckdb_vector_get_data(html_vec);
-
-	uint64_t *html_validity = duckdb_vector_get_validity(html_vec);
-	if (html_validity) {
-		// We might have NULL values, ensure the validity mask is writable
-		duckdb_vector_ensure_validity_writable(output);
-	}
-	uint64_t *result_validity = duckdb_vector_get_validity(output);
-
-	for (idx_t i = 0; i < count; i++) {
-		if (html_validity && !duckdb_validity_row_is_valid(html_validity, i)) {
-			duckdb_validity_set_row_invalid(result_validity, i);
-			continue;
-		}
-
-		const char *input_data = duckdb_string_t_data(&html_data[i]);
-		size_t input_size = duckdb_string_t_length(html_data[i]);
-
-		escape_html(info, output, i, input_data, input_size, true);
-	}
-}
-
-static void html_escape_quoute_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
-
-	idx_t count = duckdb_data_chunk_get_size(input);
-
-	duckdb_vector html_vec = duckdb_data_chunk_get_vector(input, 0);
-	duckdb_vector quote_vec = duckdb_data_chunk_get_vector(input, 1);
-
-	duckdb_string_t *html_data = (duckdb_string_t *)duckdb_vector_get_data(html_vec);
-	bool *quote_data = (bool *)duckdb_vector_get_data(quote_vec);
-
-	uint64_t *html_validity = duckdb_vector_get_validity(html_vec);
-	uint64_t *quote_validity = duckdb_vector_get_validity(quote_vec);
-
-	if (html_validity || quote_validity) {
-		// We might have NULL values, ensure the validity mask is writable
-		duckdb_vector_ensure_validity_writable(output);
-	}
-	uint64_t *result_validity = duckdb_vector_get_validity(output);
-
-	for (idx_t i = 0; i < count; i++) {
-		if ((html_validity && !duckdb_validity_row_is_valid(html_validity, i)) ||
-		    (quote_validity && !duckdb_validity_row_is_valid(quote_validity, i))) {
-			duckdb_validity_set_row_invalid(result_validity, i);
-			continue;
-		}
-
-		const char *input_data = duckdb_string_t_data(&html_data[i]);
-		size_t input_size = duckdb_string_t_length(html_data[i]);
-		bool input_quote = quote_data[i];
-
-		escape_html(info, output, i, input_data, input_size, input_quote);
-	}
-}
-
-static void html_unescape_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
-
-	idx_t count = duckdb_data_chunk_get_size(input);
-
-	duckdb_vector html_vec = duckdb_data_chunk_get_vector(input, 0);
-	duckdb_string_t *html_data = (duckdb_string_t *)duckdb_vector_get_data(html_vec);
-
-	uint64_t *html_validity = duckdb_vector_get_validity(html_vec);
-	if (html_validity) {
-		// We might have NULL values, ensure the validity mask is writable
-		duckdb_vector_ensure_validity_writable(output);
-	}
-	uint64_t *result_validity = duckdb_vector_get_validity(output);
-
-	for (idx_t i = 0; i < count; i++) {
-		if (html_validity && !duckdb_validity_row_is_valid(html_validity, i)) {
-			duckdb_validity_set_row_invalid(result_validity, i);
-			continue;
-		}
-
-		const char *input_data = duckdb_string_t_data(&html_data[i]);
-		size_t input_size = duckdb_string_t_length(html_data[i]);
-
-		// Compute the result size
-		size_t result_size = inet_html_unescaped_get_required_size(input_data, input_size);
-
-		// Allocate the result string
-		char *result_data = (char *)duckdb_malloc(result_size);
-		if (!result_data) {
-			duckdb_scalar_function_set_error(info, "Failed to allocate memory for html unescape");
-			return;
-		}
-
-		// Now parse again and fill the result string with the unescaped data
-		inet_html_unescape(input_data, input_size, result_data, result_size);
-
-		// Assign the string to the output vector
-		duckdb_vector_assign_string_element_len(output, i, result_data, result_size);
-
-		// Free the temporary string again
-		duckdb_free(result_data);
-	}
+	return string_t(result_data, result_size);
 }
 
 struct StringBuffer {
@@ -649,57 +318,87 @@ public:
 	}
 };
 
-class AddFunction : public ScalarFunction {
+static INET_T AddImplementation(const INET_T &lhs, const hugeint_t &rhs) {
+	if (rhs == 0) {
+		return lhs;
+	}
+
+	INET_EXECUTOR_TYPE result;
+	auto addr_type = (INET_IPAddressType) lhs.a_val;
+	uhugeint_t address_in = from_compatible_address(lhs.b_val, addr_type);
+	uhugeint_t address_out;
+
+	if (rhs > 0) {
+		auto rhs_val = uhugeint_t::from_hugeint(rhs.c_val());
+		address_out = address_in.add(rhs_val);
+	} else {
+		auto rhs_val = uhugeint_t::from_hugeint(rhs.negate().c_val());
+		address_out = address_in.subtract(rhs_val);
+	}
+	if (lhs.a_val == INET_IP_ADDRESS_V4) {
+		// Check if overflow ipv4
+		if (address_out.lower() >= 0xffffffff) {
+			throw std::runtime_error("Out of Range Error: Cannot add to ipv4 - out of range");
+		}
+	}
+
+	result.a_val = lhs.a_val;
+	result.b_val = to_compatible_address(address_out.c_val(), addr_type);
+	result.c_val = lhs.c_val;
+	return result;
+
+}
+
+class AddFunction : public BinaryFunction<AddFunction, INET_EXECUTOR_TYPE, PrimitiveType<hugeint_t>, INET_EXECUTOR_TYPE> {
 public:
 	const char *Name() const override {
 		return "+";
 	}
-	LogicalType ReturnType() const override {
-		return make_inet_type();
-	}
-	std::vector<LogicalType> Arguments() const override {
-		std::vector<LogicalType> result;
-		result.push_back(make_inet_type());
-		result.push_back(LogicalType::HUGEINT());
-		return result;
-	}
-	duckdb_scalar_function_t GetFunction() const override {
-		return add_function_impl;
+	static RESULT_TYPE::ARG_TYPE Operation(const A_TYPE::ARG_TYPE &lhs, const B_TYPE::ARG_TYPE &rhs) {
+		return AddImplementation(lhs, rhs);
 	}
 };
 
-class SubtractFunction : public ScalarFunction {
+class SubtractFunction : public BinaryFunction<SubtractFunction, INET_EXECUTOR_TYPE, PrimitiveType<hugeint_t>, INET_EXECUTOR_TYPE> {
 public:
 	const char *Name() const override {
 		return "-";
 	}
-	LogicalType ReturnType() const override {
-		return make_inet_type();
-	}
-	std::vector<LogicalType> Arguments() const override {
-		std::vector<LogicalType> result;
-		result.push_back(make_inet_type());
-		result.push_back(LogicalType::HUGEINT());
-		return result;
-	}
-	duckdb_scalar_function_t GetFunction() const override {
-		return sub_function_impl;
+	static RESULT_TYPE::ARG_TYPE Operation(const A_TYPE::ARG_TYPE &lhs, const B_TYPE::ARG_TYPE &rhs) {
+		return AddImplementation(lhs, rhs.negate());
 	}
 };
 
-class ContainsLeftBaseFunction : public ScalarFunction {
+static bool ContainsImplementation(const INET_T &lhs, const INET_T &rhs) {
+	INET_IPAddress lhs_inet;
+	lhs_inet.type = (INET_IPAddressType)lhs.a_val;
+	lhs_inet.address = from_compatible_address(lhs.b_val, lhs_inet.type);
+	lhs_inet.mask = lhs.c_val;
+
+	INET_IPAddress rhs_inet;
+	rhs_inet.type = (INET_IPAddressType)rhs.a_val;
+	rhs_inet.address = from_compatible_address(rhs.b_val, rhs_inet.type);
+	rhs_inet.mask = rhs.c_val;
+
+	INET_IPAddress lhs_network = ipaddress_network(&lhs_inet);
+	INET_IPAddress lhs_broadcast = ipaddress_broadcast(&lhs_inet);
+
+	INET_IPAddress rhs_network = ipaddress_network(&rhs_inet);
+	INET_IPAddress rhs_broadcast = ipaddress_broadcast(&rhs_inet);
+
+	// Set the output
+	const bool network_in_lower = lhs_network.address.lower >= rhs_network.address.lower;
+	const bool network_in_upper = lhs_network.address.upper >= rhs_network.address.upper;
+	const bool broadcast_in_lower = lhs_broadcast.address.lower <= rhs_broadcast.address.lower;
+	const bool broadcast_in_upper = lhs_broadcast.address.upper <= rhs_broadcast.address.upper;
+
+	return network_in_lower && network_in_upper && broadcast_in_lower && broadcast_in_upper;
+}
+
+class ContainsLeftBaseFunction : public BinaryFunction<ContainsLeftBaseFunction, INET_EXECUTOR_TYPE, INET_EXECUTOR_TYPE, PrimitiveType<bool>> {
 public:
-	LogicalType ReturnType() const override {
-		return LogicalType::BOOLEAN();
-	}
-	std::vector<LogicalType> Arguments() const override {
-		std::vector<LogicalType> result;
-		result.push_back(make_inet_type());
-		result.push_back(make_inet_type());
-		return result;
-	}
-	duckdb_scalar_function_t GetFunction() const override {
-		return contains_left_function_impl;
+	static RESULT_TYPE::ARG_TYPE Operation(const A_TYPE::ARG_TYPE &lhs, const B_TYPE::ARG_TYPE &rhs) {
+		return ContainsImplementation(lhs, rhs);
 	}
 };
 
@@ -717,19 +416,10 @@ public:
 	}
 };
 
-class ContainsRightBaseFunction : public ScalarFunction {
+class ContainsRightBaseFunction : public BinaryFunction<ContainsRightBaseFunction, INET_EXECUTOR_TYPE, INET_EXECUTOR_TYPE, PrimitiveType<bool>> {
 public:
-	LogicalType ReturnType() const override {
-		return LogicalType::BOOLEAN();
-	}
-	std::vector<LogicalType> Arguments() const override {
-		std::vector<LogicalType> result;
-		result.push_back(make_inet_type());
-		result.push_back(make_inet_type());
-		return result;
-	}
-	duckdb_scalar_function_t GetFunction() const override {
-		return contains_right_function_impl;
+	static RESULT_TYPE::ARG_TYPE Operation(const A_TYPE::ARG_TYPE &lhs, const B_TYPE::ARG_TYPE &rhs) {
+		return ContainsImplementation(rhs, lhs);
 	}
 };
 
@@ -747,53 +437,38 @@ public:
 	}
 };
 
-class HTMLEscapeFunction : public ScalarFunction {
+class HTMLEscapeFunction : public UnaryFunction<HTMLEscapeFunction, PrimitiveType<string_t>, PrimitiveType<string_t>, HTMLEscapeBuffer> {
 public:
-	LogicalType ReturnType() const override {
-		return LogicalType::VARCHAR();
-	}
-	std::vector<LogicalType> Arguments() const override {
-		std::vector<LogicalType> result;
-		result.push_back(LogicalType::VARCHAR());
-		return result;
-	}
-	duckdb_scalar_function_t GetFunction() const override {
-		return html_escape_function_impl;
+	static RESULT_TYPE::ARG_TYPE Operation(const INPUT_TYPE::ARG_TYPE &input, HTMLEscapeBuffer &buffer) {
+		return escape_html(input, true, buffer);
 	}
 };
 
-class HTMLEscapeQuoteFunction : public ScalarFunction {
+class HTMLEscapeQuoteFunction : public BinaryFunction<HTMLEscapeQuoteFunction, PrimitiveType<string_t>, PrimitiveType<bool>, PrimitiveType<string_t>, HTMLEscapeBuffer> {
 public:
-	LogicalType ReturnType() const override {
-		return LogicalType::VARCHAR();
-	}
-	std::vector<LogicalType> Arguments() const override {
-		std::vector<LogicalType> result;
-		result.push_back(LogicalType::VARCHAR());
-		result.push_back(LogicalType::BOOLEAN());
-		return result;
-	}
-	duckdb_scalar_function_t GetFunction() const override {
-		return html_escape_quoute_function_impl;
+	static RESULT_TYPE::ARG_TYPE Operation(const A_TYPE::ARG_TYPE &input, const B_TYPE::ARG_TYPE &input_quote, HTMLEscapeBuffer &buffer) {
+		return escape_html(input, input_quote, buffer);
 	}
 };
 
-class HTMLUnescapeFunction : public ScalarFunction {
+class HTMLUnescapeFunction : public UnaryFunction<HTMLUnescapeFunction, PrimitiveType<string_t>, PrimitiveType<string_t>, HTMLEscapeBuffer> {
 public:
 	const char *Name() const override {
 		return "html_unescape";
 	}
+	static RESULT_TYPE::ARG_TYPE Operation(const INPUT_TYPE::ARG_TYPE &input, HTMLEscapeBuffer &buffer) {
+		// FIXME: we need to do this because the new C-based decode functions require null-terminated strings
+		std::string input_str(input.GetData(), input.GetSize());
+		auto input_data = input_str.c_str();
+		auto input_size = input_str.size();
 
-	LogicalType ReturnType() const override {
-		return LogicalType::VARCHAR();
-	}
-	std::vector<LogicalType> Arguments() const override {
-		std::vector<LogicalType> result;
-		result.push_back(LogicalType::VARCHAR());
-		return result;
-	}
-	duckdb_scalar_function_t GetFunction() const override {
-		return html_unescape_function_impl;
+		// Compute the result size
+		auto result_size = inet_html_unescaped_get_required_size(input_data, input_size);
+		buffer.Allocate(result_size);
+		auto result_data = buffer.GetData();
+		inet_html_unescape(input_data, input_size, result_data, result_size);
+
+		return string_t(result_data, result_size);
 	}
 };
 

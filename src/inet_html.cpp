@@ -142,7 +142,7 @@ static const char *decode_entity(const char *beg, const char *end, uint32_t *cp1
 			}
 
 			char *num_end = NULL;
-			long value = strtol(pos, &num_end, base);
+			long long value = strtoll(pos, &num_end, base);
 			if (num_end != pos && value >= 0) {
 				if (value > UINT32_MAX) {
 					value = 0; // Out of range, use replacement character
