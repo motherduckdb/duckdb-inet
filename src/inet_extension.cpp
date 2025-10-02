@@ -100,7 +100,6 @@ LogicalType TemplateToType<INET_EXECUTOR_TYPE>() {
 //----------------------------------------------------------------------------------------------------------------------
 // CAST FUNCTIONS
 //----------------------------------------------------------------------------------------------------------------------
-
 static duckdb_uhugeint from_compatible_address(duckdb_hugeint compat_addr, INET_IPAddressType addr_type) {
 	duckdb_uhugeint retval;
 	memcpy(&retval, &compat_addr, sizeof(duckdb_uhugeint));
@@ -129,76 +128,6 @@ static duckdb_hugeint to_compatible_address(duckdb_uhugeint new_addr, INET_IPAdd
 //----------------------------------------------------------------------------------------------------------------------
 // SCALAR FUNCTIONS
 //----------------------------------------------------------------------------------------------------------------------
-static void generic_inet_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output,
-                                       INET_IPAddress (*func)(const INET_IPAddress *ip)) {
-	idx_t count = duckdb_data_chunk_get_size(input);
-
-	duckdb_vector inet_vec = duckdb_data_chunk_get_vector(input, 0);
-	duckdb_vector type_vec = duckdb_struct_vector_get_child(inet_vec, 0);
-	duckdb_vector addr_vec = duckdb_struct_vector_get_child(inet_vec, 1);
-	duckdb_vector mask_vec = duckdb_struct_vector_get_child(inet_vec, 2);
-
-	const uint8_t *type_data = (uint8_t *)duckdb_vector_get_data(type_vec);
-	const duckdb_hugeint *addr_data = (duckdb_hugeint *)duckdb_vector_get_data(addr_vec);
-	const uint16_t *mask_data = (uint16_t *)duckdb_vector_get_data(mask_vec);
-
-	duckdb_vector out_type_vec = duckdb_struct_vector_get_child(output, 0);
-	duckdb_vector out_addr_vec = duckdb_struct_vector_get_child(output, 1);
-	duckdb_vector out_mask_vec = duckdb_struct_vector_get_child(output, 2);
-
-	uint8_t *out_type_data = (uint8_t *)duckdb_vector_get_data(out_type_vec);
-	duckdb_hugeint *out_addr_data = (duckdb_hugeint *)duckdb_vector_get_data(out_addr_vec);
-	uint16_t *out_mask_data = (uint16_t *)duckdb_vector_get_data(out_mask_vec);
-
-	uint64_t *source_validity = duckdb_vector_get_validity(inet_vec);
-	if (source_validity) {
-		// We might have NULL values, ensure the validity mask is writable
-		duckdb_vector_ensure_validity_writable(output);
-		duckdb_vector_ensure_validity_writable(out_type_vec);
-		duckdb_vector_ensure_validity_writable(out_addr_vec);
-		duckdb_vector_ensure_validity_writable(out_mask_vec);
-	}
-	uint64_t *target_validity = duckdb_vector_get_validity(output);
-	uint64_t *type_validity = duckdb_vector_get_validity(out_type_vec);
-	uint64_t *addr_validity = duckdb_vector_get_validity(out_addr_vec);
-	uint64_t *mask_validity = duckdb_vector_get_validity(out_mask_vec);
-
-	for (idx_t i = 0; i < count; i++) {
-
-		if (source_validity && !duckdb_validity_row_is_valid(source_validity, i)) {
-			duckdb_validity_set_row_invalid(target_validity, i);
-			duckdb_validity_set_row_invalid(type_validity, i);
-			duckdb_validity_set_row_invalid(addr_validity, i);
-			duckdb_validity_set_row_invalid(mask_validity, i);
-			continue;
-		}
-
-		INET_IPAddress old_inet = {};
-		old_inet.type = (INET_IPAddressType)type_data[i];
-		old_inet.address = from_compatible_address(addr_data[i], old_inet.type);
-		old_inet.mask = mask_data[i];
-
-		// Apply the function
-		INET_IPAddress new_inet = func(&old_inet);
-
-		out_type_data[i] = (uint8_t)new_inet.type;
-		out_addr_data[i] = to_compatible_address(new_inet.address, new_inet.type);
-		out_mask_data[i] = new_inet.mask;
-	}
-}
-
-static void netmask_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
-	generic_inet_function_impl(info, input, output, ipaddress_netmask);
-}
-
-static void network_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
-	generic_inet_function_impl(info, input, output, ipaddress_network);
-}
-
-static void broadcast_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output) {
-	generic_inet_function_impl(info, input, output, ipaddress_broadcast);
-}
-
 static void arithmetic_function_impl(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output,
                                      bool is_add) {
 	idx_t count = duckdb_data_chunk_get_size(input);
@@ -654,57 +583,69 @@ public:
 	}
 };
 
-class NetmaskFunction : public ScalarFunction {
+class NetmaskFunction : public UnaryFunction<NetmaskFunction, INET_EXECUTOR_TYPE, INET_EXECUTOR_TYPE> {
 public:
 	const char *Name() const override {
 		return "netmask";
 	}
-	LogicalType ReturnType() const override {
-		return make_inet_type();
-	}
-	std::vector<LogicalType> Arguments() const override {
-		std::vector<LogicalType> result;
-		result.push_back(make_inet_type());
+	static RESULT_TYPE::ARG_TYPE Operation(const INPUT_TYPE::ARG_TYPE &input) {
+		INET_IPAddress old_inet = {};
+		old_inet.type = (INET_IPAddressType)input.a_val;
+		old_inet.address = from_compatible_address(input.b_val, old_inet.type);
+		old_inet.mask = input.c_val;
+
+		// Apply the function
+		INET_IPAddress new_inet = ipaddress_netmask(&old_inet);
+
+		RESULT_TYPE::ARG_TYPE result;
+		result.a_val = (uint8_t)new_inet.type;
+		result.b_val = to_compatible_address(new_inet.address, new_inet.type);
+		result.c_val = new_inet.mask;
 		return result;
-	}
-	duckdb_scalar_function_t GetFunction() const override {
-		return netmask_function_impl;
 	}
 };
 
-class NetworkFunction : public ScalarFunction {
+class NetworkFunction : public UnaryFunction<NetworkFunction, INET_EXECUTOR_TYPE, INET_EXECUTOR_TYPE> {
 public:
 	const char *Name() const override {
 		return "network";
 	}
-	LogicalType ReturnType() const override {
-		return make_inet_type();
-	}
-	std::vector<LogicalType> Arguments() const override {
-		std::vector<LogicalType> result;
-		result.push_back(make_inet_type());
+	static RESULT_TYPE::ARG_TYPE Operation(const INPUT_TYPE::ARG_TYPE &input) {
+		INET_IPAddress old_inet = {};
+		old_inet.type = (INET_IPAddressType)input.a_val;
+		old_inet.address = from_compatible_address(input.b_val, old_inet.type);
+		old_inet.mask = input.c_val;
+
+		// Apply the function
+		INET_IPAddress new_inet = ipaddress_network(&old_inet);
+
+		RESULT_TYPE::ARG_TYPE result;
+		result.a_val = (uint8_t)new_inet.type;
+		result.b_val = to_compatible_address(new_inet.address, new_inet.type);
+		result.c_val = new_inet.mask;
 		return result;
-	}
-	duckdb_scalar_function_t GetFunction() const override {
-		return network_function_impl;
 	}
 };
 
-class BroadcastFunction : public ScalarFunction {
+class BroadcastFunction : public UnaryFunction<BroadcastFunction, INET_EXECUTOR_TYPE, INET_EXECUTOR_TYPE> {
 public:
 	const char *Name() const override {
 		return "broadcast";
 	}
-	LogicalType ReturnType() const override {
-		return make_inet_type();
-	}
-	std::vector<LogicalType> Arguments() const override {
-		std::vector<LogicalType> result;
-		result.push_back(make_inet_type());
+	static RESULT_TYPE::ARG_TYPE Operation(const INPUT_TYPE::ARG_TYPE &input) {
+		INET_IPAddress old_inet = {};
+		old_inet.type = (INET_IPAddressType)input.a_val;
+		old_inet.address = from_compatible_address(input.b_val, old_inet.type);
+		old_inet.mask = input.c_val;
+
+		// Apply the function
+		INET_IPAddress new_inet = ipaddress_broadcast(&old_inet);
+
+		RESULT_TYPE::ARG_TYPE result;
+		result.a_val = (uint8_t)new_inet.type;
+		result.b_val = to_compatible_address(new_inet.address, new_inet.type);
+		result.c_val = new_inet.mask;
 		return result;
-	}
-	duckdb_scalar_function_t GetFunction() const override {
-		return broadcast_function_impl;
 	}
 };
 
