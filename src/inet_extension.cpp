@@ -457,10 +457,8 @@ public:
 		return "html_unescape";
 	}
 	static RESULT_TYPE::ARG_TYPE Operation(const INPUT_TYPE::ARG_TYPE &input, HTMLEscapeBuffer &buffer) {
-		// FIXME: we need to do this because the new C-based decode functions require null-terminated strings
-		std::string input_str(input.GetData(), input.GetSize());
-		auto input_data = input_str.c_str();
-		auto input_size = input_str.size();
+		auto input_data = input.GetData();
+		auto input_size = input.GetSize();
 
 		// Compute the result size
 		auto result_size = inet_html_unescaped_get_required_size(input_data, input_size);
