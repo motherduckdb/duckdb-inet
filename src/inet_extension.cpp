@@ -15,6 +15,7 @@
 #include "duckdb/stable/string_type.hpp"
 #include "duckdb/stable/hugeint.hpp"
 #include "duckdb/stable/uhugeint.hpp"
+#include "duckdb/stable/exception.hpp"
 
 // Forward declare vtable
 DUCKDB_EXTENSION_EXTERN
@@ -318,6 +319,22 @@ public:
 	}
 };
 
+namespace duckdb_stable {
+
+template<>
+FormatValue FormatValue::CreateFormatValue(INET_T input) {
+	INET_IPAddress inet;
+	inet.type = (INET_IPAddressType)input.a_val;
+	inet.address = from_compatible_address(input.b_val, inet.type);
+	inet.mask = inet.type == INET_IP_ADDRESS_V4 ? 32 : 128;
+
+	char buffer[256];
+	size_t len = ipaddress_to_string(&inet, buffer, sizeof(buffer));
+	return FormatValue(std::string(buffer, len));
+}
+
+}
+
 static INET_T AddImplementation(const INET_T &lhs, const hugeint_t &rhs) {
 	if (rhs == 0) {
 		return lhs;
@@ -338,7 +355,7 @@ static INET_T AddImplementation(const INET_T &lhs, const hugeint_t &rhs) {
 	if (lhs.a_val == INET_IP_ADDRESS_V4) {
 		// Check if overflow ipv4
 		if (address_out.lower() >= 0xffffffff) {
-			throw std::runtime_error("Out of Range Error: Cannot add to ipv4 - out of range");
+			throw OutOfRangeException("Cannot add {} to IPv4 Address {}", rhs, lhs);
 		}
 	}
 

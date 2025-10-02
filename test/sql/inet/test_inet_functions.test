@@ -107,7 +107,7 @@ Out of Range Error: Overflow in subtraction
 statement error
 select INET '255.255.255.255' + 1
 ----
-Out of Range Error: Cannot add
+Out of Range Error: Cannot add 1
 
 query I
 SELECT * FROM (VALUES (netmask('10.10.10.1/12')), (broadcast('10.10.10.2/8')), (network('10.10.10.3')));
