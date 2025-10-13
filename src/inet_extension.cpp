@@ -339,10 +339,10 @@ static INET_T AddImplementation(const INET_T &lhs, const hugeint_t &rhs) {
 	uhugeint_t address_out;
 
 	if (rhs > 0) {
-		auto rhs_val = uhugeint_t::from_hugeint(rhs.c_val());
+		auto rhs_val = uhugeint_t::from_hugeint(rhs.c_hugeint());
 		address_out = address_in.add(rhs_val);
 	} else {
-		auto rhs_val = uhugeint_t::from_hugeint(rhs.negate().c_val());
+		auto rhs_val = uhugeint_t::from_hugeint(rhs.negate().c_hugeint());
 		address_out = address_in.subtract(rhs_val);
 	}
 	if (lhs.a_val == INET_IP_ADDRESS_V4) {
@@ -353,7 +353,7 @@ static INET_T AddImplementation(const INET_T &lhs, const hugeint_t &rhs) {
 	}
 
 	result.a_val = lhs.a_val;
-	result.b_val = to_compatible_address(address_out.c_val(), addr_type);
+	result.b_val = to_compatible_address(address_out.c_uhugeint(), addr_type);
 	result.c_val = lhs.c_val;
 	return result;
 
