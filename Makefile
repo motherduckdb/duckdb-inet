@@ -11,7 +11,8 @@ EXTENSION_NAME=inet
 USE_UNSTABLE_C_API=1
 
 # The DuckDB version to target
-TARGET_DUCKDB_VERSION=v1.4.1
+TARGET_DUCKDB_VERSION=353406bd7f
+DUCKDB_TEST_VERSION=v1.5.0-dev56
 
 all: configure release
 
