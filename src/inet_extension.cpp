@@ -347,7 +347,7 @@ static INET_T AddImplementation(const INET_T &lhs, const hugeint_t &rhs) {
 	}
 	if (lhs.a_val == INET_IP_ADDRESS_V4) {
 		// Check if overflow ipv4
-		if (address_out.lower() >= 0xffffffff) {
+		if (address_out.lower() > 0xffffffff) {
 			throw OutOfRangeException("Cannot add {} to IPv4 Address {}", rhs, lhs);
 		}
 	}
