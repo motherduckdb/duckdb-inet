@@ -204,6 +204,9 @@ static INET_IPAddress parse_ipv6(const char *data, size_t size) {
 			if (c < size && data[c] != '/') {
 				throw std::runtime_error("IPv4 format can only be used for the final 2 quibbles.");
 			}
+			if (parsed_quibble_count + 2 > INET_IPV6_NUM_QUIBBLE) {
+				throw std::runtime_error("IPv4 format can only be used for the final 2 quibbles.");
+			}
 
 			auto ipv4 = parse_ipv4(data + start, c - start);
 

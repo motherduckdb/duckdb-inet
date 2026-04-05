@@ -183,3 +183,9 @@ statement error
 SELECT 'gggg:gggg:gggg:gggg:gggg:gggg:gggg:gggg/128'::INET
 ----
 Expected a number
+
+# IPv4 dotted notation after too many hex quibbles (stack buffer overflow fix)
+statement error
+SELECT 'a:b:c:d:e:f:a:1.2.3.4'::INET;
+----
+IPv4 format can only be used for the final 2 quibbles
