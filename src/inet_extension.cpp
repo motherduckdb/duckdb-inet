@@ -18,12 +18,12 @@ static constexpr auto INET_TYPE_NAME = "INET";
 static void LoadInternal(ExtensionLoader &loader) {
   // add the "inet" type
   child_list_t<LogicalType> children;
-  children.push_back(make_pair("ip_type", LogicalType::UTINYINT));
+  children.emplace_back(make_pair("ip_type", LogicalType::UTINYINT));
   // The address type would ideally be UHUGEINT, but the initial version was
   // HUGEINT so maintain backwards-compatibility with db written with older
   // versions.
-  children.push_back(make_pair("address", LogicalType::HUGEINT));
-  children.push_back(make_pair("mask", LogicalType::USMALLINT));
+  children.emplace_back(make_pair("address", LogicalType::HUGEINT));
+  children.emplace_back(make_pair("mask", LogicalType::USMALLINT));
   auto inet_type = LogicalType::STRUCT(std::move(children));
   inet_type.SetAlias(INET_TYPE_NAME);
   loader.RegisterType(INET_TYPE_NAME, inet_type);
@@ -56,10 +56,14 @@ static void LoadInternal(ExtensionLoader &loader) {
   // Add - function with ALTER_ON_CONFLICT
   ScalarFunction substract_fun("-", {inet_type, LogicalType::HUGEINT},
                                inet_type, INetFunctions::Subtract);
+  // throws when the address over- or underflows
+  substract_fun.SetFallible();
   loader.AddFunctionOverload(substract_fun);
 
   ScalarFunction add_fun("+", {inet_type, LogicalType::HUGEINT}, inet_type,
                          INetFunctions::Add);
+  // throws when the address over- or underflows
+  add_fun.SetFallible();
   loader.AddFunctionOverload(add_fun);
 
   // Add IP range operators
