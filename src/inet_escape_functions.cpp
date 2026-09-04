@@ -38,8 +38,7 @@ struct UnescapeBindData : public FunctionData {
 };
 
 unique_ptr<FunctionData>
-UnescapeBind(ClientContext &context, ScalarFunction &bound_function,
-             vector<unique_ptr<Expression>> &arguments) {
+UnescapeBind(BindScalarFunctionInput &) {
   return make_uniq<UnescapeBindData>();
 }
 
@@ -389,7 +388,7 @@ void INetFunctions::Escape(DataChunk &args, ExpressionState &state,
 void INetFunctions::Unescape(DataChunk &args, ExpressionState &state,
                              Vector &result) {
   auto &func_expr = state.expr.Cast<BoundFunctionExpression>();
-  auto &info = func_expr.bind_info->Cast<UnescapeBindData>();
+  auto &info = func_expr.BindInfo()->Cast<UnescapeBindData>();
   UnaryExecutor::Execute<string_t, string_t>(
       args.data[0], result, args.size(), [&](string_t input_st) {
         idx_t result_size = 0;

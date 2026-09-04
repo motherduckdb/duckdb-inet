@@ -46,12 +46,12 @@ bool INetFunctions::CastVarcharToINET(Vector &source, Vector &result,
   auto constant = source.GetVectorType() == VectorType::CONSTANT_VECTOR;
 
   UnifiedVectorFormat vdata;
-  source.ToUnifiedFormat(count, vdata);
+  source.ToUnifiedFormat(vdata);
 
   auto &entries = StructVector::GetEntries(result);
-  auto ip_type = FlatVector::GetData<uint8_t>(*entries[0]);
-  auto address_data = FlatVector::GetData<hugeint_t>(*entries[1]);
-  auto mask_data = FlatVector::GetData<uint16_t>(*entries[2]);
+  auto ip_type = FlatVector::GetDataMutable<uint8_t>(entries[0]);
+  auto address_data = FlatVector::GetDataMutable<hugeint_t>(entries[1]);
+  auto mask_data = FlatVector::GetDataMutable<uint16_t>(entries[2]);
 
   auto input = UnifiedVectorFormat::GetData<string_t>(vdata);
   bool success = true;

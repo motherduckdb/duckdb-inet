@@ -1,5 +1,6 @@
 #include "ipaddress.hpp"
 #include "duckdb/common/operator/cast_operators.hpp"
+#include "duckdb/function/cast/default_casts.hpp"
 #include "duckdb/common/types/cast_helpers.hpp"
 #include "duckdb/common/string_util.hpp"
 
