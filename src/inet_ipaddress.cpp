@@ -478,10 +478,13 @@ INET_IPAddress ipaddress_network(const INET_IPAddress *ip) {
 INET_IPAddress ipaddress_broadcast(const INET_IPAddress *ip) {
 	INET_IPAddress network = ipaddress_network(ip);
 	INET_IPAddress netmask = ipaddress_netmask(ip);
+	duckdb_uhugeint ipv4_mask = { IPV4_NETWORK_MASK, 0 };
+	duckdb_uhugeint full_mask = ip->type == INET_IP_ADDRESS_V4 ? ipv4_mask : IPV6_NETWORK_MASK;
+	duckdb_uhugeint host_mask = uhugeint_xor(full_mask, netmask.address);
 	INET_IPAddress result = {};
 	result.type = ip->type;
 	result.mask = ip->mask;
-	result.address.upper = network.address.upper | (~netmask.address.upper);
-	result.address.lower = network.address.lower | (~netmask.address.lower);
+	result.address.upper = network.address.upper | host_mask.upper;
+	result.address.lower = network.address.lower | host_mask.lower;
 	return result;
 }

@@ -78,6 +78,24 @@ SELECT broadcast(INET '192.168.1.5/16')
 ----
 192.168.255.255/16
 
+# broadcast result should equal the equivalent directly-parsed address
+query I
+SELECT broadcast(INET '192.168.1.5/24') = INET '192.168.1.255/24';
+----
+true
+
+# broadcast result should sort correctly
+query I
+SELECT broadcast(INET '192.168.1.5/24') > INET '0.0.0.1';
+----
+true
+
+# broadcast of /0 should work
+query I
+SELECT broadcast(INET '10.0.0.1/0')
+----
+255.255.255.255/0
+
 # subtract
 query I
 SELECT INET '127.0.0.255' - 32;

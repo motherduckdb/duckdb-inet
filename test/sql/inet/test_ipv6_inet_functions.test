@@ -88,6 +88,12 @@ SELECT broadcast(INET '2001:db8:3c4d::/32')
 ----
 2001:db8:ffff:ffff:ffff:ffff:ffff:ffff/32
 
+# broadcast result should equal the equivalent directly-parsed address
+query I
+SELECT broadcast(INET '2001:db8:3c4d::/48') = INET '2001:db8:3c4d:ffff:ffff:ffff:ffff:ffff/48';
+----
+true
+
 # subtract
 query I
 SELECT INET '::ffff:127.0.0.255' - 32;
