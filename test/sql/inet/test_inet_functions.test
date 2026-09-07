@@ -104,6 +104,16 @@ SELECT INET '0.0.0.0' - 32;
 ----
 Out of Range Error: Overflow in subtraction
 
+query I
+SELECT INET '255.255.255.254' + 1;
+----
+255.255.255.255
+
+query I
+SELECT INET '0.0.0.0' + 0;
+----
+0.0.0.0
+
 statement error
 select INET '255.255.255.255' + 1
 ----
